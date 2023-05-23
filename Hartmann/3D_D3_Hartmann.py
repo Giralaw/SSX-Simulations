@@ -17,7 +17,7 @@ Ly = 2.
 Lz = 1.
 
 nx = 64
-ny = 64 #2; or 64 for full 3D
+ny = 2 #2; or 64 for full 3D
 nz = 64
 
 Ha = 20. #20, 10, 1, or 0 (Pouiselle flow)
@@ -26,11 +26,11 @@ Rm = 1.
 Pi = 1.
 tau = 0.1
 
-stop_time = 5 #or 10
-data_dir = "scratch3D" #change each time or overwrite
+stop_time = 5 #5 or 10
+data_dir = "scratch" #change each time or overwrite
 
 dealias = 3/2
-mesh = [8,8] #[8,8] or [2,2], generally
+mesh = [2,2] #[8,8] or [2,2], generally; None to keep non-parallelized
 
 coords = d3.CartesianCoordinates('x', 'y', 'z')
 dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
@@ -87,10 +87,10 @@ hartmann.add_equation("trace(grad_A) + tau_phi = 0")
 hartmann.add_equation("integ(phi) = 0")
 
 # boundary conditions
-hartmann.add_equation("v(z=0) = 0") # no-slip
-hartmann.add_equation("ex@A(z=0) = 0")
-hartmann.add_equation("ey@A(z=0) = 0")
-hartmann.add_equation("phi(z=0) = 0")
+hartmann.add_equation("v(z=-Lz) = 0") # no-slip
+hartmann.add_equation("ex@A(z=-Lz) = 0")
+hartmann.add_equation("ey@A(z=-Lz) = 0")
+hartmann.add_equation("phi(z=-Lz) = 0")
 
 hartmann.add_equation("v(z=Lz) = 0") # no-slip
 hartmann.add_equation("ex@A(z=Lz) = 0")
