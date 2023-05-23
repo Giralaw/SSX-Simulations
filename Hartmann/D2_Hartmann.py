@@ -1,5 +1,7 @@
 """2D Hartmann flow example
 Uses vector potential form of MHD; incompressible Navier-Stokes, no further approximations.
+
+Dedalus 2 version. Unless you have particular reason to look at this, should refer to the Dedalus 3 version, instead.
 """
 import os
 import sys
