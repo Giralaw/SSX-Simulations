@@ -60,6 +60,7 @@ def plot_fit_z(func, x_array, y_array, i):
     plt.semilogy(x_array, func(x_array, *popt), 'r-', label = "analytical solution")
     #plt.title("Hartmann profile for conducting walls")
     plt.legend(loc='lower center')
+    plt.title(" v_x Velocity Profile")
     plt.xlabel("z")
     plt.ylabel(r"$v_x$")
     chi_square = (chi_squared(y_array, func(x_array, *popt)))
@@ -78,8 +79,9 @@ def plot_fit_b_z(func, x_array, y_array, i):
     plt.plot(x_array, func(x_array, *popt), 'r-', label = "analytical solution")
     #plt.title("Induced magnetic field for Hartmann flow")
     plt.legend(loc='lower center')
+    plt.title(" B_x Induced Magnetic Field Profile")
     plt.xlabel("z")
-    plt.ylabel(r"$B_xH_a$")
+    plt.ylabel(r"$B_x$")
     chi_square = (chi_squared(y_array, func(x_array, *popt)))
     R_squared = (r2_score(y_array, func(x_array,*popt)))
     Root_mean_squared_error = (np.sqrt(mean_squared_error(y_array, func(x_array, *popt))))
@@ -89,9 +91,9 @@ def plot_fit_b_z(func, x_array, y_array, i):
    
     
 def hartmann_errors():
-        data = h5py.File("./scratch/integrals/integrals_s1.h5", "r")
+        data = h5py.File("./scratch2/integrals/integrals_s1.h5", "r")
         # y = data['scales/y_hash_f08571fe67493aa5454ad70f13fdb247e5cbe449/'][:]
-        z = (data['scales/z_hash_2b3e6c1ad6197e7bbb577c37c9be3babe1727daf/'][:])*2-1
+        z = (data['scales/z_hash_24c956bcc02c8dc6378aaf5ce148dd993d0851b1/'][:]) #changed based on what your h5 file's z label is
         # x   = data['tasks/<vx>_xy'][:]
         bz = data['tasks/<Bx>_xy'][-1,0,0,:]*20
         vxz = data['tasks/<vx>_xy'][-1,0,-1,:]
