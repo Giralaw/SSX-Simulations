@@ -87,15 +87,15 @@ hartmann.add_equation("trace(grad_A) + tau_phi = 0")
 hartmann.add_equation("integ(phi) = 0")
 
 # boundary conditions
-hartmann.add_equation("v(z=-Lz) = 0") # no-slip
-hartmann.add_equation("ex@A(z=-Lz) = 0")
-hartmann.add_equation("ey@A(z=-Lz) = 0")
-hartmann.add_equation("phi(z=-Lz) = 0")
+hartmann.add_equation("v(z='left') = 0") # no-slip
+hartmann.add_equation("ex@A(z='left') = 0")
+hartmann.add_equation("ey@A(z='left') = 0")
+hartmann.add_equation("phi(z='left') = 0")
 
-hartmann.add_equation("v(z=Lz) = 0") # no-slip
-hartmann.add_equation("ex@A(z=Lz) = 0")
-hartmann.add_equation("ey@A(z=Lz) = 0")
-hartmann.add_equation("phi(z=Lz) = 0")
+hartmann.add_equation("v(z='right') = 0") # no-slip
+hartmann.add_equation("ex@A(z='right') = 0")
+hartmann.add_equation("ey@A(z='right') = 0")
+hartmann.add_equation("phi(z='right') = 0")
 
 
 # build solver

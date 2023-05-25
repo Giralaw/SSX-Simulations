@@ -37,7 +37,7 @@ from dedalus.extras import flow_tools
 from matplotlib import pyplot
 import matplotlib as mpl
 
-from two_spheromaks_Edit1 import spheromak_1
+from two_spheromaks import spheromak_1
 
 import logging
 logger = logging.getLogger(__name__)
@@ -46,17 +46,17 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 32
-ny = 32
-nz = 160
+nx = 28
+ny = 24
+nz = 180
 r = 1
 length = 10
 
 # for 3D runs, you can divide the work up over two dimensions (x and y).
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
-mesh = None
-#mesh = [16,16]
+#mesh = None
+mesh = [14,12]
 
 kappa = 0.01
 mu = 0.05
@@ -66,79 +66,61 @@ gamma = 5./3.
 eta_sp = 2.7 * 10**(-4)
 eta_ch = 4.4 * 10**(-3)
 v0_ch = 2.9 * 10**(-2)
-chi = kappa/rho0
-nu = mu/rho0
 
-#Domain, dist, bases
-coords = de.CartesianCoordinates('x', 'y','z')
-dist = de.Distributor(coords, dtype=np.float64, mesh = mesh)
+x = de.SinCos('x', nx, interval=(-r, r))
+y = de.SinCos('y', ny, interval=(-r, r))
+z = de.SinCos('z', nz, interval=(0,length))
 
-xbasis = de.RealFourier(coords['x'], size=nx, bounds=(-r, r))
-ybasis = de.RealFourier(coords['y'], size=ny, bounds=(-r, r))
-zbasis = de.RealFourier(coords['z'], size=nz, bounds=(0, length))
+domain = de.Domain([x,y,z],grid_dtype='float', mesh = mesh)
 
-# Fields (D3 Update)
-lnrho = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
-T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
-vx = dist.Field(name='vx', bases=(xbasis, ybasis, zbasis))
-vy = dist.Field(name='vy', bases=(xbasis, ybasis, zbasis))
-vz = dist.Field(name='vz', bases=(xbasis, ybasis, zbasis))
-Ax = dist.Field(name='Ax', bases=(xbasis, ybasis, zbasis))
-Ay = dist.Field(name='Ay', bases=(xbasis, ybasis, zbasis))
-Az = dist.Field(name='Az', bases=(xbasis, ybasis, zbasis))
-phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
-t = dist.Field(name='t')
+SSX = de.IVP(domain, variables=['lnrho','T', 'vx', 'vy', 'vz', 'Ax', 'Ay', 'Az', 'phi'])
 
-# Substitutions
-ex, ey, ez = coords.unit_vector_fields(dist)
-dx = lambda C: de.Differentiate(C, coords['x'])
-dy = lambda C: de.Differentiate(C, coords['y'])
-dz = lambda C: de.Differentiate(C, coords['z'])
-divv = dx(vx) + dy(vy) + dz(vz)
-def vdotgrad(A):
-    return(vx*dx(A) + vy*dy(A) + vz*dz(A))
-def Bdotgrad(A):
-    return(Bx*dx(A) + By*dy(A) + Bz*dz(A))
-def Lap(A):
-    return(dx(dx(A)) + dy(dy(A)) + dz(dz(A)))
-Bx = dy(Az) - dz(Ay)
-By = dz(Ax) - dx(Az)
-Bz = dx(Ay) - dy(Ax)
+SSX.meta['T','lnrho']['x', 'y', 'z']['parity'] = 1
+#SSX.meta['eta1']['x', 'y', 'z']['parity'] = 1
+SSX.meta['phi']['x', 'y', 'z']['parity'] = -1
 
-# Coulomb Gauge implies J = -Laplacian(A) # this led to my train of thought in Hartmann code - Alex
-jx = -Lap(Ax)
-jy = -Lap(Ay)
-jz = -Lap(Az)
-J2 = jx**2 + jy**2 + jz**2
-rho = np.exp(lnrho)
+SSX.meta['vx']['y', 'z']['parity'] =  1
+SSX.meta['vx']['x']['parity'] = -1
+SSX.meta['vy']['x', 'z']['parity'] = 1
+SSX.meta['vy']['y']['parity'] = -1
+SSX.meta['vz']['x', 'y']['parity'] = 1
+SSX.meta['vz']['z']['parity'] = -1
 
+SSX.meta['Ax']['y', 'z']['parity'] =  -1
+SSX.meta['Ax']['x']['parity'] = 1
+SSX.meta['Ay']['x', 'z']['parity'] = -1
+SSX.meta['Ay']['y']['parity'] = 1
+SSX.meta['Az']['x', 'y']['parity'] = -1
+SSX.meta['Az']['z']['parity'] = 1
+
+SSX.parameters['mu'] = mu
+SSX.parameters['chi'] = kappa/rho0
+SSX.parameters['nu'] = mu/rho0
+SSX.parameters['eta'] = eta
+SSX.parameters['gamma'] = gamma
+SSX.parameters['eta_sp'] = eta_sp
+SSX.parameters['eta_ch'] = eta_ch
+SSX.parameters['v0_ch'] = v0_ch
+
+SSX.substitutions['divv'] = "dx(vx) + dy(vy) + dz(vz)"
+SSX.substitutions['vdotgrad(A)'] = "vx*dx(A) + vy*dy(A) + vz*dz(A)"
+SSX.substitutions['Bdotgrad(A)'] = "Bx*dx(A) + By*dy(A) + Bz*dz(A)"
+SSX.substitutions['Lap(A)'] = "dx(dx(A)) + dy(dy(A)) + dz(dz(A))"
+SSX.substitutions['Bx'] = "dy(Az) - dz(Ay)"
+SSX.substitutions['By'] = "dz(Ax) - dx(Az)"
+SSX.substitutions['Bz'] = "dx(Ay) - dy(Ax)"
+
+# Coulomb Gauge implies J = -Laplacian(A)
+SSX.substitutions['jx'] = "-Lap(Ax)"
+SSX.substitutions['jy'] = "-Lap(Ay)"
+SSX.substitutions['jz'] = "-Lap(Az)"
+SSX.substitutions['J2'] = "jx**2 + jy**2 + jz**2"
+SSX.substitutions['rho'] = "exp(lnrho)"
 # CFL substitutions
-Va_x = Bx/np.sqrt(rho)
-Va_y = By/np.sqrt(rho)
-Va_z = Bz/np.sqrt(rho)
-Cs = np.sqrt(gamma*T)
-
-
-#Problem
-SSX = de.IVP([lnrho,T, vx, vy, vz, Ax, Ay, Az, phi], time=t, namespace=locals())
-# SSX.meta['T','lnrho']['x', 'y', 'z']['parity'] = 1 #.meta is no longer a thing?
-# #SSX.meta['eta1']['x', 'y', 'z']['parity'] = 1
-# SSX.meta['phi']['x', 'y', 'z']['parity'] = -1
-
-# SSX.meta['vx']['y', 'z']['parity'] =  1
-# SSX.meta['vx']['x']['parity'] = -1
-# SSX.meta['vy']['x', 'z']['parity'] = 1
-# SSX.meta['vy']['y']['parity'] = -1
-# SSX.meta['vz']['x', 'y']['parity'] = 1
-# SSX.meta['vz']['z']['parity'] = -1
-
-# SSX.meta['Ax']['y', 'z']['parity'] =  -1
-# SSX.meta['Ax']['x']['parity'] = 1
-# SSX.meta['Ay']['x', 'z']['parity'] = -1
-# SSX.meta['Ay']['y']['parity'] = 1
-# SSX.meta['Az']['x', 'y']['parity'] = -1
-# SSX.meta['Az']['z']['parity'] = 1
-
+SSX.substitutions['Va_x'] = "Bx/sqrt(rho)"
+SSX.substitutions['Va_y'] = "By/sqrt(rho)"
+SSX.substitutions['Va_z'] = "Bz/sqrt(rho)"
+SSX.substitutions['Cs'] = "sqrt(gamma*T)"
 #resistivity
 #SSX.add_equation("eta1 = eta_sp/(sqrt(T)**3) + (eta_ch/sqrt(rho))*(1 - exp((-v0_ch*sqrt(J2))/(3*rho*sqrt(gamma*T))))")
 
@@ -161,7 +143,7 @@ SSX.add_equation("phi = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*Lap(T) = - (gamma - 1) * T * divv  - vdotgrad(T) + (gamma - 1)*eta*J2")
 
-solver = SSX.build_solver(de.RK443)
+solver = SSX.build_solver(de.timesteppers.RK443)
 
 # Initial timestep
 dt = 1e-4
@@ -230,7 +212,7 @@ for i in range(x.shape[0]):
 #               fullGrid[i][j][k] = rho_min
 
 ##########################################################################################################################################
-#-------------------------------enforcing circular crosssection of density---------------------------------------------------------------#
+#-------------------------------enforcing circular cross-section of density---------------------------------------------------------------#
 ##########################################################################################################################################
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
@@ -312,7 +294,7 @@ flow.add_property("T", name = 'temp')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
-CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 1, safety = CFL_safety,
+CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 10, safety = CFL_safety, #cadence 10 or 1, reasons for either (higher dt resolution at merging point - check every 1)
                      max_change = 1.5, min_change = 0.005, max_dt = output_cadence, threshold = 0.05)
 CFL.add_velocities(('vx', 'vy', 'vz'))
 CFL.add_velocities(('Va_x', 'Va_y', 'Va_z'))
@@ -344,7 +326,6 @@ try:
             np.clip(vx['g'], -100, 100, out=vx['g'])
             np.clip(vy['g'], -100, 100, out=vy['g'])
             np.clip(vz['g'], -100, 100, out=vz['g'])
-            #np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
             if not np.isfinite(Re_k_avg):
                 good_solution = False
                 logger.info("Terminating run.  Trapped on Reynolds = {}".format(Re_k_avg))

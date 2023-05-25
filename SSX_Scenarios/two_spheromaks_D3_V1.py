@@ -1,4 +1,4 @@
-import dedalus.public as de
+import dedalus.public as d3
 import numpy as np
 from scipy.special import j0, j1, jn_zeros
 import matplotlib.pyplot as plt
@@ -157,7 +157,7 @@ def spheromak_A(domain, center=(0,0,0), B0 = 1, R = 1, L = 1):
     #####################################################################
     """ Setting up the domain """
     #####################################################################
-    problem = de.LBVP(domain, variables = ['Ax', 'Ay', 'Az'])
+    problem = d3.LBVP(domain, variables = ['Ax', 'Ay', 'Az'])
     #####################################################################
     """ Meta Parameters """
     #####################################################################
@@ -255,7 +255,7 @@ def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
     lam = np.sqrt(kr**2 + kz**2)
     J0 = B0
 
-    problem = de.LBVP(domain, variables=['Ax', 'Ay', 'Az'])
+    problem = d3.LBVP(domain, variables=['Ax', 'Ay', 'Az'])
     # problem.meta['Ax']['y', 'z']['parity'] =  -1
     # problem.meta['Ax']['x']['parity'] = 1
     # problem.meta['Ay']['x', 'z']['parity'] = -1
