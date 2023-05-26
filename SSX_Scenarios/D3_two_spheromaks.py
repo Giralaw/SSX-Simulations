@@ -2,10 +2,6 @@ import dedalus.public as d3
 import numpy as np
 from scipy.special import j0, j1, jn_zeros
 import matplotlib.pyplot as plt
-import os
-import h5py
-from mpi4py import MPI
-from matplotlib.colors import LogNorm
 
 #See "Turbulence analysis of an experimental flux-rope plasma", D A Schaffner et al, 2014.
 ###########################################################################################
@@ -131,7 +127,7 @@ def getS(r, z, L, R, zCenter):
     S = r1 * z1
     return S
 
-def spheromak_A(domain, center=(0,0,0), B0 = 1, R = 1, L = 1):
+def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """
     This function returns the intial 2X-spheromak vector potential components (x, y, z).
     J0 - Current density
@@ -145,6 +141,21 @@ def spheromak_A(domain, center=(0,0,0), B0 = 1, R = 1, L = 1):
     # B0 should always be 1, but we are leaving it as a parameter for safe keeping.
     """
 
+    nx = 32
+    ny = 32
+    nz = 160
+    r = 1
+    length = 10
+    mesh = None #[16,16]
+    # dist = dist
+    # coords = coords
+    coords = d3.CartesianCoordinates('x', 'y','z')
+    dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
+    
+    xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
+    ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
+    zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length))
+
     j1_zero1 = jn_zeros(1,1)[0]
     kr = j1_zero1/R
     kz = np.pi/L
@@ -154,27 +165,15 @@ def spheromak_A(domain, center=(0,0,0), B0 = 1, R = 1, L = 1):
     #####################################################################
     """ Setting up the problem in dedalus. """
     #####################################################################
-    #####################################################################
-    """ Setting up the domain """
-    #####################################################################
-    problem = d3.LBVP(domain, variables = ['Ax', 'Ay', 'Az'])
-    #####################################################################
-    """ Meta Parameters """
-    #####################################################################
-    problem.meta['Ax']['y', 'z']['parity'] =  -1
-    problem.meta['Ax']['x']['parity'] = 1
-    problem.meta['Ay']['x', 'z']['parity'] = -1
-    problem.meta['Ay']['y']['parity'] = 1
-    problem.meta['Az']['x', 'y']['parity'] = -1
-    problem.meta['Az']['z']['parity'] = 1
+    # Find out if equivalent to meta parameters exists in D3
     #####################################################################
     """ Creating fields/variables """
     # Current density components
     #####################################################################
-    J0_x = domain.new_field()
-    J0_y = domain.new_field()
-    J0_z = domain.new_field()
-    xx, yy, zz = domain.grids()
+    J0_x = dist.Field(name='J0_x', bases=(xbasis, ybasis, zbasis))
+    J0_y = dist.Field(name='J0_y', bases=(xbasis, ybasis, zbasis))
+    J0_z = dist.Field(name='J0_z', bases=(xbasis, ybasis, zbasis))
+    xx, yy, zz = dist.local_grids(xbasis, ybasis, zbasis)
     #####################################################################
     """ Setting cylindrical coordinates """
     #####################################################################
@@ -199,6 +198,7 @@ def spheromak_A(domain, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """ Initializing the domain fields/grids for the dedalus problem. """
     # J0 is set to B0, which should be 1.
     #####################################################################
+    
     J0_x['g'] = J0*(J_r*np.cos(theta) - J_t*np.sin(theta))
     J0_y['g'] = J0*(J_r*np.sin(theta) + J_t*np.cos(theta))
     J0_z['g'] = J0*S*lam*(kr*j0(kr*r)*np.sin(z*kz)) + J0*S1*lam*(kr*j0(kr*r)*np.sin((-z1)*kz))
@@ -210,7 +210,15 @@ def spheromak_A(domain, center=(0,0,0), B0 = 1, R = 1, L = 1):
     # J0_y.meta['y']['parity'] = 1
     # J0_z.meta['x', 'y']['parity'] = -1
     # J0_z.meta['z']['parity'] = 1
+    #####################################################################
+    """ Initialize the problem """
+    #####################################################################
+    Ax = dist.Field(coords, name='Ax', bases=(xbasis, ybasis, zbasis))
+    Ay = dist.Field(coords, name='Ay', bases=(xbasis, ybasis, zbasis))
+    Az = dist.Field(coords, name='Az', bases=(xbasis, ybasis, zbasis))
 
+
+    problem = d3.LBVP([Ax, Ay, Az],namespace=locals())
     problem.parameters['J0_x'] = J0_x
     problem.parameters['J0_y'] = J0_y
     problem.parameters['J0_z'] = J0_z

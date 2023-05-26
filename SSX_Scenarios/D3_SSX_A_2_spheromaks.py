@@ -198,7 +198,7 @@ rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
 ## Spheromak initial condition
-aa_x, aa_y, aa_z = spheromak_1(domain)
+aa_x, aa_y, aa_z = spheromak_1(dist,coords)
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
 Ax['g'] = aa_x*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 Ay['g'] = aa_y*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
