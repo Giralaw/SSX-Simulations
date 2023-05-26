@@ -151,7 +151,7 @@ def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     # coords = coords
     coords = d3.CartesianCoordinates('x', 'y','z')
     dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
-    
+    ex, ey, ez = coords.unit_vector_fields(dist)
     xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
     ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
     zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length))
@@ -165,14 +165,12 @@ def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     #####################################################################
     """ Setting up the problem in dedalus. """
     #####################################################################
-    # Find out if equivalent to meta parameters exists in D3
+    # Find out if an equivalent to meta parameters exists in D3
     #####################################################################
     """ Creating fields/variables """
     # Current density components
     #####################################################################
-    J0_x = dist.Field(name='J0_x', bases=(xbasis, ybasis, zbasis))
-    J0_y = dist.Field(name='J0_y', bases=(xbasis, ybasis, zbasis))
-    J0_z = dist.Field(name='J0_z', bases=(xbasis, ybasis, zbasis))
+    J = dist.VectorField(name='J', bases=(xbasis, ybasis, zbasis))
     xx, yy, zz = dist.local_grids(xbasis, ybasis, zbasis)
     #####################################################################
     """ Setting cylindrical coordinates """
@@ -187,8 +185,8 @@ def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     S = getS(r, z, L, R, center[2])
     S1 = getS1(r,z1, L, R, 10)
     #####################################################################
-    """ Current density; cylindrical componetns Eq. (9) """
-    # Note they are sums of two seperate shape functions. S and S1.
+    """ Current density; cylindrical components Eq. (9) """
+    # Note they are sums of two separate shape functions. S and S1.
     # S - centered at 0
     # S1 - centered at 10 (The other end of the domain)
     #####################################################################
@@ -199,43 +197,23 @@ def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     # J0 is set to B0, which should be 1.
     #####################################################################
     
-    J0_x['g'] = J0*(J_r*np.cos(theta) - J_t*np.sin(theta))
-    J0_y['g'] = J0*(J_r*np.sin(theta) + J_t*np.cos(theta))
-    J0_z['g'] = J0*S*lam*(kr*j0(kr*r)*np.sin(z*kz)) + J0*S1*lam*(kr*j0(kr*r)*np.sin((-z1)*kz))
+    J['g'][0] = J0*(J_r*np.cos(theta) - J_t*np.sin(theta))
+    J['g'][1] = J0*(J_r*np.sin(theta) + J_t*np.cos(theta))
+    J['g'][2] = J0*S*lam*(kr*j0(kr*r)*np.sin(z*kz)) + J0*S1*lam*(kr*j0(kr*r)*np.sin((-z1)*kz))
 
-
-    # J0_x.meta['y', 'z']['parity'] = -1
-    # J0_x.meta['x']['parity'] = 1
-    # J0_y.meta['x', 'z']['parity'] = -1
-    # J0_y.meta['y']['parity'] = 1
-    # J0_z.meta['x', 'y']['parity'] = -1
-    # J0_z.meta['z']['parity'] = 1
     #####################################################################
     """ Initialize the problem """
     #####################################################################
-    Ax = dist.Field(coords, name='Ax', bases=(xbasis, ybasis, zbasis))
-    Ay = dist.Field(coords, name='Ay', bases=(xbasis, ybasis, zbasis))
-    Az = dist.Field(coords, name='Az', bases=(xbasis, ybasis, zbasis))
+    A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
 
-
-    problem = d3.LBVP([Ax, Ay, Az],namespace=locals())
-    problem.parameters['J0_x'] = J0_x
-    problem.parameters['J0_y'] = J0_y
-    problem.parameters['J0_z'] = J0_z
-
+    problem = d3.LBVP([A],namespace=locals())
 
     #####################################################################
     """ Force Free Equations/Spheromak """
     #####################################################################
     # x-component
-    problem.add_equation("dx(dx(Ax)) + dy(dy(Ax)) + dz(dz(Ax)) =  -J0_x", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
-    problem.add_equation("Ax = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
-    # y-component
-    problem.add_equation("dx(dx(Ay)) + dy(dy(Ay)) + dz(dz(Ay)) =  -J0_y", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
-    problem.add_equation("Ay = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
-    # z-component
-    problem.add_equation("dx(dx(Az)) + dy(dy(Az)) + dz(dz(Az)) =  -J0_z", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
-    problem.add_equation("Az = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
+    problem.add_equation("lap(A) =  -J", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
+    # problem.add_equation("A = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
 
     #####################################################################
     """ Building the solver """
@@ -244,7 +222,7 @@ def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     solver = problem.build_solver()
     solver.solve()
     
-    return solver.state['Ax']['g'], solver.state['Ay']['g'], solver.state['Az']['g']
+    return solver.state['A']['g'][0], solver.state['A']['g'][1], solver.state['A']['g'][2]
 
 def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
     """ 

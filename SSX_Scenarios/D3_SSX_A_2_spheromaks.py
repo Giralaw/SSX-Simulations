@@ -26,16 +26,12 @@ We use the vector potential, and enforce the Coulomb Gauge, div(A) = 0.
 
 """
 
-import os
-import sys
 import time
 import numpy as np
 
 import dedalus.public as d3
 from dedalus.extras import flow_tools
 
-from matplotlib import pyplot
-import matplotlib as mpl
 
 from two_spheromaks_D3_V1 import spheromak_1
 
@@ -183,9 +179,7 @@ vy = solver.state['vy']
 vx = solver.state['vx']
 #eta1 = solver.state['eta1']
 
-x = domain.grid(0)
-y = domain.grid(1)
-z = domain.grid(2)
+x,y,z = xbasis.global_grid(), ybasis.global_grid(), zbasis.global_grid()
 fullGrid = x*y*z
 
 fullGrid1 = x*y*z
