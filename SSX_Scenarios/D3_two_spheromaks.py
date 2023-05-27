@@ -127,7 +127,7 @@ def getS(r, z, L, R, zCenter):
     S = r1 * z1
     return S
 
-def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
+def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """
     This function returns the intial 2X-spheromak vector potential components (x, y, z).
     J0 - Current density
@@ -149,9 +149,8 @@ def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     mesh = None #[16,16]
     # dist = dist
     # coords = coords
-    coords = d3.CartesianCoordinates('x', 'y','z')
     dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
-    ex, ey, ez = coords.unit_vector_fields(dist)
+    # ex, ey, ez = coords.unit_vector_fields(dist)
     xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
     ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
     zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length))
@@ -170,7 +169,7 @@ def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """ Creating fields/variables """
     # Current density components
     #####################################################################
-    J = dist.VectorField(name='J', bases=(xbasis, ybasis, zbasis))
+    J = dist.VectorField(coords, name='J', bases=(xbasis, ybasis, zbasis))
     xx, yy, zz = dist.local_grids(xbasis, ybasis, zbasis)
     #####################################################################
     """ Setting cylindrical coordinates """
@@ -205,15 +204,22 @@ def spheromak_A(dist, coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """ Initialize the problem """
     #####################################################################
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
+    A['c'][0] = 0
+    A['c'][1] = 0
+    A['c'][2] = 0
+    # tau_phi = dist.Field(name='tau_phi')
 
     problem = d3.LBVP([A],namespace=locals())
 
     #####################################################################
     """ Force Free Equations/Spheromak """
     #####################################################################
-    # x-component
-    problem.add_equation("lap(A) =  -J", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
-    # problem.add_equation("A = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
+    # lap(A) = -J
+    problem.add_equation("lap(A) =  -J")
+    problem.add_equation("div(A) = 0")
+
+    #div(A) = 0
+    # problem.add_equation("trace(grad(A)) + tau_phi = 0")
 
     #####################################################################
     """ Building the solver """
@@ -289,8 +295,8 @@ def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
 
     return solver.state['Ax']['g'], solver.state['Ay']['g'], solver.state['Az']['g']
 
-def spheromak_1(domain):
-    aa_x_1, aa_y_1, aa_z_1 = spheromak_A(domain)
+def spheromak_1(coords = d3.CartesianCoordinates('x', 'y','z')):
+    aa_x_1, aa_y_1, aa_z_1 = spheromak_A(coords)
     #aa_x_2, aa_y_2, aa_z_2 = spheromak_B(domain)
     return aa_x_1, aa_y_1, aa_z_1
 
@@ -325,3 +331,5 @@ def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
     Bx['g'] = Br*np.cos(theta) - Bt*np.sin(theta)
     By['g'] = Br*np.sin(theta) + Bt*np.cos(theta)
     Bz['g'] = B0 * j0(kr*r) * np.sin(kz*z)
+
+spheromak_1()
