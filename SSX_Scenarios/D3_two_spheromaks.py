@@ -367,4 +367,4 @@ def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
     By['g'] = Br*np.sin(theta) + Bt*np.cos(theta)
     Bz['g'] = B0 * j0(kr*r) * np.sin(kz*z)
 
-# print("A is", spheromak_1())
+# spheromak_1()
