@@ -28,6 +28,7 @@ We use the vector potential, and enforce the Coulomb Gauge, div(A) = 0.
 
 import time
 import numpy as np
+import os
 
 import dedalus.public as d3
 from dedalus.extras import flow_tools
@@ -53,6 +54,7 @@ length = 10
 # of cores used.
 mesh = None
 #mesh = [16,16]
+data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.01
 mu = 0.05
@@ -90,6 +92,8 @@ dz = lambda C: d3.Differentiate(C, coords['z'])
 B = d3.curl(A)
 
 # Coulomb Gauge implies J = -Laplacian(A)
+#how do we add j into the problem so it can be used in analysis tasks?
+j = dist.VectorField(coords, name ='j', bases = (xbasis, ybasis, zbasis))
 j = -d3.lap(A)
 J2 = j@j
 rho = np.exp(lnrho)
@@ -101,7 +105,7 @@ Cs = np.sqrt(gamma*T)
 #Problem
 SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
 
-#Meta lines were originally here - as with init, find out if there is d3 equivalent.
+#SSX.meta lines were originally here - as in two-spheromaks, find out if there is d3 equivalent.
 
 #resistivity
 #SSX.add_equation("eta1 = eta_sp/(sqrt(T)**3) + (eta_ch/sqrt(rho))*(1 - exp((-v0_ch*sqrt(J2))/(3*rho*sqrt(gamma*T))))")
@@ -110,7 +114,7 @@ SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
 SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
 
 # Momentum
-SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T@grad(lnrho) - v@grad(v) + cross(j,B)/rho")
+SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
 SSX.add_equation("dt(A) + grad(phi) = - eta*j + cross(v,B)")
@@ -125,7 +129,8 @@ SSX.add_equation("integ(phi) = 0")
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v)  - v@grad(T) + (gamma - 1)*eta*J2")
 
-solver = SSX.build_solver(d3.RK443) #switch to RK222?
+solver = SSX.build_solver(d3.RK222) #switch to RK222? (formerly 443)
+logger.info("Solver built")
 
 # Initial timestep
 dt = 1e-4
@@ -137,10 +142,12 @@ solver.stop_iteration = np.inf
 
 
 # Initial conditions
-A = solver.state['A']
-lnrho = solver.state['lnrho']
-T = solver.state['T']
-v = solver.state['v']
+# Do we still need these solver.state lines in D3? Always get complains about list indices; but maybe these are necessary
+# For analysis tasks to recognize the vars?
+# A = solver.state['A']
+# lnrho = solver.state['lnrho']
+# T = solver.state['T']
+# v = solver.state['v']
 #eta1 = solver.state['eta1']
 
 x,y,z = xbasis.global_grid(), ybasis.global_grid(), zbasis.global_grid()
@@ -155,14 +162,14 @@ lambda_rho1 = 0.1
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
-## Spheromak initial condition
+# Spheromak initial condition
 aa = spheromak_1(coords)
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
 A['g'] = aa*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 
 #initial velocity
 max_vel = 0.1
-#vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
+##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
 
 for i in range(x.shape[0]):
@@ -173,6 +180,7 @@ for i in range(x.shape[0]):
            zVal = z[0,0,k]
            fullGrid[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
 
+#ignoring this section for now
 ##########################################################################################################################################
 #--------------------------------------density in the z direction with cosine transisition ----------------------------------------------#
 ##########################################################################################################################################
@@ -188,6 +196,7 @@ for i in range(x.shape[0]):
 ##########################################################################################################################################
 #-------------------------------enforcing circular crosssection of density---------------------------------------------------------------#
 ##########################################################################################################################################
+
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
     for j in range(y.shape[1]):
@@ -195,7 +204,7 @@ for i in range(x.shape[0]):
        for k in range(z.shape[2]):
             zVal = z[0,0,k]
             r = np.sqrt(xVal**2 + yVal**2)
-#fullGrid[i][j][k] = np.tanh(40*r+40)*(fullGrid[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(fullGrid[i][j][k]-rho_min)/2 + rho_min #tanh transistion
+##fullGrid[i][j][k] = np.tanh(40*r+40)*(fullGrid[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(fullGrid[i][j][k]-rho_min)/2 + rho_min #tanh transistion
 
 ##########################################################################################################################################
 #-----------------------------------------------sinusodial transistion-----------------------------------------------------------------------------#
@@ -207,62 +216,65 @@ for i in range(x.shape[0]):
             else:
                fullGrid[i][j][k] = rho_min
 
-rho0 = dist.Field(name='rho0')
+rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
 rho0['g'] = fullGrid
 
 lnrho['g'] = np.log(rho0['g'])
 T['g'] = T0 * rho0['g']**(gamma - 1)
 
-#eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0['g']))*(1 - np.exp((-v0_ch)/(3*rho0['g']*np.sqrt(gamma*T['g']))))
+##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0['g']))*(1 - np.exp((-v0_ch)/(3*rho0['g']*np.sqrt(gamma*T['g']))))
 
 # analysis output
-#data_dir = './'+sys.argv[0].split('.py')[0]
+##data_dir = './'+sys.argv[0].split('.py')[0]
 wall_dt_checkpoints = 60*55
 output_cadence = 0.1 # This is in simulation time units
 
 '''checkpoint = solver.evaluator.add_file_handler('checkpoints2', max_writes=1, wall_dt=wall_dt_checkpoints, mode='overwrite')
 checkpoint.add_system(solver.state, layout='c')'''
 
-field_writes = solver.evaluator.add_file_handler('fields_two', max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
-field_writes.add_task('v')
-field_writes.add_task('B')
-field_writes.add_task('j')
-field_writes.add_task("exp(lnrho)", name = 'rho')
-field_writes.add_task('T')
-#field_writes.add_task('eta1')
+field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
+# trying to just put j for third one yields issues - because j not variable in problem?
+field_writes.add_task(v)
+field_writes.add_task(B)
+field_writes.add_task(d3.curl(B), name='j')
+field_writes.add_task(np.exp(lnrho), name = 'rho') #exp not defined?
+field_writes.add_task(T)
+# field_writes.add_task(eta1)
 
-parameter_writes = solver.evaluator.add_file_handler('parameters_two', max_writes = 1, sim_dt = output_cadence, mode = 'overwrite')
-parameter_writes.add_task('mu')
-parameter_writes.add_task('eta')
-parameter_writes.add_task('nu')
-parameter_writes.add_task('chi')
-parameter_writes.add_task('gamma')
+# complaint about floats not having a dtype - can comment this out, but is probably nice
+# to have parameters in h5 file with rest of scenario
+parameter_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'parameters_two'), max_writes = 1, sim_dt = output_cadence, mode = 'overwrite')
+# parameter_writes.add_task(mu)
+# parameter_writes.add_task(eta)
+# parameter_writes.add_task(nu)
+# parameter_writes.add_task(chi)
+# parameter_writes.add_task(gamma)
 
-load_writes = solver.evaluator.add_file_handler('load_data_two', max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
-load_writes.add_task('v')
-load_writes.add_task('A')
-load_writes.add_task('lnrho')
-load_writes.add_task('T')
-load_writes.add_task('phi')
-
+load_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'load_data_two'), max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
+load_writes.add_task(v)
+load_writes.add_task(A)
+load_writes.add_task(lnrho)
+load_writes.add_task(T)
+load_writes.add_task(phi)
 
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
-flow.add_property("sqrt(v@v) / nu", name = 'Re_k')
-flow.add_property("sqrt(v@v) / eta", name = 'Re_m')
-flow.add_property("sqrt(v@v)", name = 'flow_speed')
-flow.add_property("sqrt(v@v) / sqrt(T)", name = 'Ma')
-flow.add_property("sqrt(B@B) / sqrt(rho)", name = 'Al_v')
-flow.add_property("T", name = 'temp')
+flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
+flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
+flow.add_property(np.sqrt(v@v), name = 'flow_speed')
+flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma')
+flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
+flow.add_property(T, name = 'temp')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
 CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 1, safety = CFL_safety,
                      max_change = 1.5, min_change = 0.005, max_dt = output_cadence, threshold = 0.05)
-CFL.add_velocity('v')
-CFL.add_velocity('Va')
-CFL.add_velocity( 'Cs')
-
+CFL.add_velocity(v)
+CFL.add_velocity(Va)
+#not sure how to turn Cs into a vector; or if that's still something that we ought to be doing
+#CFL.add_velocity(Cs)
+#CFL.add_velocities(( 'Cs', 'Cs', 'Cs'))
 
 good_solution = True
 # Main loop
@@ -270,14 +282,13 @@ try:
     logger.info('Starting loop')
     logger_string = 'kappa: {:.3g}, mu: {:.3g}, eta: {:.3g}, dt: {:.3g}'.format(kappa, mu, eta, dt)
     logger.info(logger_string)
-    start_time = time.time()
-    while solver.ok and good_solution:
-        dt = CFL.compute_dt()
+    while solver.proceed:
+        dt = CFL.compute_timestep()
         solver.step(dt)
-        
+            
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
-            #logger_string += 'min_rho: {:.4e}'.format(lnrho['g'].min())
+            ##logger_string += 'min_rho: {:.4e}'.format(lnrho['g'].min())
             Re_k_avg = flow.grid_average('Re_k')
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
@@ -287,7 +298,7 @@ try:
             np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
             np.clip(T['g'], 0.001, 1000, out=T['g'])
             np.clip(v['g'], -100, 100, out=v['g'])
-            #np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
+            ##np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
             if not np.isfinite(Re_k_avg):
                 good_solution = False
                 logger.info("Terminating run.  Trapped on Reynolds = {}".format(Re_k_avg))
@@ -300,4 +311,3 @@ except:
     raise
 finally:
     solver.log_stats()
-

@@ -26,7 +26,7 @@ Rm = 1.
 Pi = 1.
 tau = 0.1
 
-stop_time = 5 #5 or 10
+stop_time = 1 #5 or 10
 data_dir = "scratch" #change each time or overwrite
 
 dealias = 3/2
