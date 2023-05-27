@@ -73,6 +73,8 @@ def getS1(r, z, L, R, zCenter):
     #for i in range (180):
     #    plot_2d(x, y, S[:, :, i], i)
     return S
+
+# Leaving alone for now
 def plot_2d(x, y, z, i):
     plt.imshow(z, extent=(np.amin(x), np.amax(x), np.amin(y), np.amax(y)), cmap=plt.cm.hot)
     plt.colorbar()
@@ -147,6 +149,7 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     r = 1
     length = 10
     mesh = None #[16,16]
+    data_dir = "scratch_init"
     # dist = dist
     # coords = coords
     dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
@@ -159,6 +162,7 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     kr = j1_zero1/R
     kz = np.pi/L
 
+    #Force-free configuration: curl(B) = J = lam*B
     lam = np.sqrt(kr**2 + kz**2)
     J0 = B0 # This should be 1.
     #####################################################################
@@ -169,6 +173,8 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """ Creating fields/variables """
     # Current density components
     #####################################################################
+
+    #if not a problem variable, is it correct to express our (fixed) J as a vectorfield like normal?
     J = dist.VectorField(coords, name='J', bases=(xbasis, ybasis, zbasis))
     xx, yy, zz = dist.local_grids(xbasis, ybasis, zbasis)
     #####################################################################
@@ -192,7 +198,7 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     J_r = S*lam*(-np.pi*j1(kr*r)*np.cos(z*kz)) + S1*lam*(np.pi*j1(kr*r)*np.cos((-z1)*kz))
     J_t = S*lam*(lam*j1(kr*r)*np.sin(z*kz)) - S1*lam*(-lam*j1(kr*r)*np.sin((-z1)*kz))
     #####################################################################
-    """ Initializing the domain fields/grids for the dedalus problem. """
+    """ Initializing the J fields for the dedalus problem. """
     # J0 is set to B0, which should be 1.
     #####################################################################
     
@@ -204,22 +210,38 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """ Initialize the problem """
     #####################################################################
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
+
+    # Translation of nx,ny,nz conditions in D2 version?
     A['c'][0] = 0
     A['c'][1] = 0
     A['c'][2] = 0
-    # tau_phi = dist.Field(name='tau_phi')
 
-    problem = d3.LBVP([A],namespace=locals())
+    tau_phi = dist.VectorField(coords, name='tau_phi')
+    # grad_A = d3.grad(A)
+
+    problem = d3.LBVP([A, tau_phi],namespace=locals())
 
     #####################################################################
     """ Force Free Equations/Spheromak """
     #####################################################################
-    # lap(A) = -J
-    problem.add_equation("lap(A) =  -J")
-    problem.add_equation("div(A) = 0")
+    # Currently unable to get square system.
+    # Unsure what vars/equations to add to make up for removal of "condition" equations that were in D2 version
+    # tau_phi doesn't seem to resolve issue; in particular because solver says it makes this nonlinear
 
-    #div(A) = 0
-    # problem.add_equation("trace(grad(A)) + tau_phi = 0")
+    # lap(A) = -J
+    # This... seems to work? But integ(A) being used to get div(A) = 0 doesn't make sense to me, yet.
+    # Need to come up with a good way to check if what this gives is correct. Add a task to this to make an h5 file that saves A.
+    problem.add_equation("lap(A) + tau_phi =  -J")
+    problem.add_equation("integ(A) = 0")
+
+    # Could treat J as B instead and do:
+    # problem.add_equation("curl(A) =  J/Lam")
+    # problem.add_equation("div(A) = 0")
+
+    # First order form and phi off of Hartmann?
+    # But this is an lbvp, not ivp, and phi showed up in d/dt equation, so it doesn't seem like phi would be relevant here
+    # problem.add_equation("trace(grad_A) + tau_phi = 0")
+    # problem.add_equation("integ(phi) = 0")
 
     #####################################################################
     """ Building the solver """
@@ -228,8 +250,9 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     solver = problem.build_solver()
     solver.solve()
     
-    return solver.state['A']['g'][0], solver.state['A']['g'][1], solver.state['A']['g'][2]
+    return A['g'][0], A['g'][1], A['g'][2]
 
+# spheromak_B has not been updated yet: Will leave as was until we have a use for it
 def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
     """ 
         Returns the intial 1X-spheromak vector potential components.
@@ -295,11 +318,14 @@ def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
 
     return solver.state['Ax']['g'], solver.state['Ay']['g'], solver.state['Az']['g']
 
+# main function which calls getS,GetS1, and spheromak_A
 def spheromak_1(coords = d3.CartesianCoordinates('x', 'y','z')):
     aa_x_1, aa_y_1, aa_z_1 = spheromak_A(coords)
-    #aa_x_2, aa_y_2, aa_z_2 = spheromak_B(domain)
+    #aa_x_2, aa_y_2, aa_z_2 = spheromak_B(coords)
+    
     return aa_x_1, aa_y_1, aa_z_1
 
+# Also leaving this function alone until we need it
 def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
     """
     Incomplete function
@@ -332,4 +358,4 @@ def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
     By['g'] = Br*np.sin(theta) + Bt*np.cos(theta)
     Bz['g'] = B0 * j0(kr*r) * np.sin(kz*z)
 
-spheromak_1()
+print(spheromak_1())
