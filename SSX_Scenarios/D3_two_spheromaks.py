@@ -210,6 +210,7 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """ Initialize the problem """
     #####################################################################
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
+    B = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
 
     # Translation of nx,ny,nz conditions in D2 version?
     A['c'][0] = 0
@@ -219,7 +220,7 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     tau_phi = dist.VectorField(coords, name='tau_phi')
     # grad_A = d3.grad(A)
 
-    problem = d3.LBVP([A, tau_phi],namespace=locals())
+    problem = d3.LBVP([A, B, tau_phi],namespace=locals())
 
     #####################################################################
     """ Force Free Equations/Spheromak """
@@ -233,6 +234,7 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     # Need to come up with a good way to check if what this gives is correct. Add a task to this to make an h5 file that saves A.
     problem.add_equation("lap(A) + tau_phi =  -J")
     problem.add_equation("integ(A) = 0")
+    problem.add_equation("curl(A) - B = 0")
 
     # Could treat J as B instead and do:
     # problem.add_equation("curl(A) =  J/Lam")
@@ -249,6 +251,13 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     #####################################################################
     solver = problem.build_solver()
     solver.solve()
+
+    # print("B is", B['g'][0], B['g'][1], B['g'][2])
+
+    #analysis
+    # Not sure how to add analysis tasks for a non-IVP. Just want to be able to see B field itself.
+    # Current method is to just add B to the problem.
+    # snapshots.add_task(d3.curl(A), name='Magnetic field')
     
     return A['g'][0], A['g'][1], A['g'][2]
 
@@ -320,10 +329,10 @@ def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
 
 # main function which calls getS,GetS1, and spheromak_A
 def spheromak_1(coords = d3.CartesianCoordinates('x', 'y','z')):
-    aa_x_1, aa_y_1, aa_z_1 = spheromak_A(coords)
+    aa_1 = spheromak_A(coords)
     #aa_x_2, aa_y_2, aa_z_2 = spheromak_B(coords)
     
-    return aa_x_1, aa_y_1, aa_z_1
+    return aa_1
 
 # Also leaving this function alone until we need it
 def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
@@ -358,4 +367,4 @@ def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
     By['g'] = Br*np.sin(theta) + Bt*np.cos(theta)
     Bz['g'] = B0 * j0(kr*r) * np.sin(kz*z)
 
-print(spheromak_1())
+# print("A is", spheromak_1())

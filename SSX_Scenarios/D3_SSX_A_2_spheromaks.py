@@ -2,11 +2,11 @@
 
 This is the *simplest* model we will consider for modelling spheromaks evolving in the SSX wind tunnel.
 
-Major simplificiations fall in two categories
+Major simplifications fall in two categories
 
 Geometry
 --------
-We consider a square duct using parity bases (sin/cos) in all directions.
+We consider a square duct using parity bases (sin/cos) in all directions. (RealFourier in D3)
 
 Equations
 ---------
@@ -18,7 +18,7 @@ The equations themselves are those from Schaffner et al (2014), with the followi
 * no mass diffusion
 
 For this first model, rather than kinematic viscosity nu and thermal
-diffusivitiy chi varying with density rho as they should, we are here
+diffusivity chi varying with density rho as they should, we are here
 holding them *constant*. This dramatically simplifies the form of the
 equations in Dedalus.
 
@@ -65,7 +65,7 @@ v0_ch = 2.9 * 10**(-2)
 chi = kappa/rho0
 nu = mu/rho0
 
-#Domain, dist, bases
+#Coords, dist, bases
 coords = d3.CartesianCoordinates('x', 'y','z')
 dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
 
@@ -73,91 +73,59 @@ xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
 ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
 zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length))
 
-# Fields (D3 Update)
+# Fields
+t = dist.Field(name='t')
+v = dist.VectorField(coords, name='v', bases=(xbasis, ybasis, zbasis))
+A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
 lnrho = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
 T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
-vx = dist.Field(name='vx', bases=(xbasis, ybasis, zbasis))
-vy = dist.Field(name='vy', bases=(xbasis, ybasis, zbasis))
-vz = dist.Field(name='vz', bases=(xbasis, ybasis, zbasis))
-Ax = dist.Field(name='Ax', bases=(xbasis, ybasis, zbasis))
-Ay = dist.Field(name='Ay', bases=(xbasis, ybasis, zbasis))
-Az = dist.Field(name='Az', bases=(xbasis, ybasis, zbasis))
 phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
-t = dist.Field(name='t')
+tau_A = dist.Field(name='tau_A')
 
 # Substitutions
 ex, ey, ez = coords.unit_vector_fields(dist)
 dx = lambda C: d3.Differentiate(C, coords['x'])
 dy = lambda C: d3.Differentiate(C, coords['y'])
 dz = lambda C: d3.Differentiate(C, coords['z'])
-divv = dx(vx) + dy(vy) + dz(vz)
-def vdotgrad(A):
-    return(vx*dx(A) + vy*dy(A) + vz*dz(A))
-def Bdotgrad(A):
-    return(Bx*dx(A) + By*dy(A) + Bz*dz(A))
-def Lap(A):
-    return(dx(dx(A)) + dy(dy(A)) + dz(dz(A)))
-Bx = dy(Az) - dz(Ay)
-By = dz(Ax) - dx(Az)
-Bz = dx(Ay) - dy(Ax)
+B = d3.curl(A)
 
-# Coulomb Gauge implies J = -Laplacian(A) # this led to my train of thought in Hartmann code - Alex
-jx = -Lap(Ax)
-jy = -Lap(Ay)
-jz = -Lap(Az)
-J2 = jx**2 + jy**2 + jz**2
+# Coulomb Gauge implies J = -Laplacian(A)
+j = -d3.lap(A)
+J2 = j@j
 rho = np.exp(lnrho)
 
 # CFL substitutions
-Va_x = Bx/np.sqrt(rho)
-Va_y = By/np.sqrt(rho)
-Va_z = Bz/np.sqrt(rho)
+Va = B/np.sqrt(rho)
 Cs = np.sqrt(gamma*T)
 
-
 #Problem
-SSX = d3.IVP([lnrho,T, vx, vy, vz, Ax, Ay, Az, phi], time=t, namespace=locals())
-# SSX.meta['T','lnrho']['x', 'y', 'z']['parity'] = 1 #.meta is no longer a thing?
-# #SSX.meta['eta1']['x', 'y', 'z']['parity'] = 1
-# SSX.meta['phi']['x', 'y', 'z']['parity'] = -1
+SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
 
-# SSX.meta['vx']['y', 'z']['parity'] =  1
-# SSX.meta['vx']['x']['parity'] = -1
-# SSX.meta['vy']['x', 'z']['parity'] = 1
-# SSX.meta['vy']['y']['parity'] = -1
-# SSX.meta['vz']['x', 'y']['parity'] = 1
-# SSX.meta['vz']['z']['parity'] = -1
-
-# SSX.meta['Ax']['y', 'z']['parity'] =  -1
-# SSX.meta['Ax']['x']['parity'] = 1
-# SSX.meta['Ay']['x', 'z']['parity'] = -1
-# SSX.meta['Ay']['y']['parity'] = 1
-# SSX.meta['Az']['x', 'y']['parity'] = -1
-# SSX.meta['Az']['z']['parity'] = 1
+#Meta lines were originally here - as with init, find out if there is d3 equivalent.
 
 #resistivity
 #SSX.add_equation("eta1 = eta_sp/(sqrt(T)**3) + (eta_ch/sqrt(rho))*(1 - exp((-v0_ch*sqrt(J2))/(3*rho*sqrt(gamma*T))))")
 
 # Continuity
-SSX.add_equation("dt(lnrho) + divv = - vdotgrad(lnrho)")
+SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
 
 # Momentum
-SSX.add_equation("dt(vx) + dx(T) - nu*Lap(vx) = T*dx(lnrho) - vdotgrad(vx) + (jy*Bz - jz*By)/rho")
-SSX.add_equation("dt(vy) + dy(T) - nu*Lap(vy) = T*dy(lnrho) - vdotgrad(vy) + (jz*Bx - jx*Bz)/rho")
-SSX.add_equation("dt(vz) + dz(T) - nu*Lap(vz) = T*dz(lnrho) - vdotgrad(vz) + (jx*By - jy*Bx)/rho")
+SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T@grad(lnrho) - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
-SSX.add_equation("dt(Ax) + dx(phi) = - eta*jx + vy*Bz - vz*By")
-SSX.add_equation("dt(Ay) + dy(phi) = - eta*jy + vz*Bx - vx*Bz")
-SSX.add_equation("dt(Az) + dz(phi) = - eta*jz + vx*By - vy*Bx")
-SSX.add_equation("dx(Ax) + dy(Ay) + dz(Az) = 0", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
-SSX.add_equation("phi = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
+SSX.add_equation("dt(A) + grad(phi) = - eta*j + cross(v,B)")
+
+#these two should replace the commented equations below?
+SSX.add_equation("div(A) + tau_A = 0")
+SSX.add_equation("integ(phi) = 0")
+#SSX.add_equation("dx(Ax) + dy(Ay) + dz(Az) = 0", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
+#SSX.add_equation("phi = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
 
 
 # Energy
-SSX.add_equation("dt(T) - (gamma - 1) * chi*Lap(T) = - (gamma - 1) * T * divv  - vdotgrad(T) + (gamma - 1)*eta*J2")
+SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v)  - v@grad(T) + (gamma - 1)*eta*J2")
 
-solver = SSX.build_solver(d3.RK443)
+solver = SSX.build_solver(d3.RK443) #switch to RK222?
 
 # Initial timestep
 dt = 1e-4
@@ -169,14 +137,10 @@ solver.stop_iteration = np.inf
 
 
 # Initial conditions
-Ax = solver.state['Ax']
-Ay = solver.state['Ay']
-Az = solver.state['Az']
+A = solver.state['A']
 lnrho = solver.state['lnrho']
 T = solver.state['T']
-vz = solver.state['vz']
-vy = solver.state['vy']
-vx = solver.state['vx']
+v = solver.state['v']
 #eta1 = solver.state['eta1']
 
 x,y,z = xbasis.global_grid(), ybasis.global_grid(), zbasis.global_grid()
@@ -192,11 +156,9 @@ rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
 ## Spheromak initial condition
-aa_x, aa_y, aa_z = spheromak_1(coords)
+aa = spheromak_1(coords)
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-Ax['g'] = aa_x*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
-Ay['g'] = aa_y*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
-Az['g'] = aa_z*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
+A['g'] = aa*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 
 #initial velocity
 max_vel = 0.1
@@ -245,7 +207,7 @@ for i in range(x.shape[0]):
             else:
                fullGrid[i][j][k] = rho_min
 
-rho0 = domain.new_field()
+rho0 = dist.Field(name='rho0')
 rho0['g'] = fullGrid
 
 lnrho['g'] = np.log(rho0['g'])
@@ -262,15 +224,9 @@ output_cadence = 0.1 # This is in simulation time units
 checkpoint.add_system(solver.state, layout='c')'''
 
 field_writes = solver.evaluator.add_file_handler('fields_two', max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
-field_writes.add_task('vx')
-field_writes.add_task('vy')
-field_writes.add_task('vz')
-field_writes.add_task('Bx')
-field_writes.add_task('By')
-field_writes.add_task('Bz')
-field_writes.add_task('jx')
-field_writes.add_task('jy')
-field_writes.add_task('jz')
+field_writes.add_task('v')
+field_writes.add_task('B')
+field_writes.add_task('j')
 field_writes.add_task("exp(lnrho)", name = 'rho')
 field_writes.add_task('T')
 #field_writes.add_task('eta1')
@@ -283,34 +239,29 @@ parameter_writes.add_task('chi')
 parameter_writes.add_task('gamma')
 
 load_writes = solver.evaluator.add_file_handler('load_data_two', max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
-load_writes.add_task('vx')
-load_writes.add_task('vy')
-load_writes.add_task('vz')
-load_writes.add_task('Ax')
-load_writes.add_task('Ay')
-load_writes.add_task('Az')
+load_writes.add_task('v')
+load_writes.add_task('A')
 load_writes.add_task('lnrho')
 load_writes.add_task('T')
 load_writes.add_task('phi')
 
 
-
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
-flow.add_property("sqrt(vx*vx + vy*vy + vz*vz) / nu", name = 'Re_k')
-flow.add_property("sqrt(vx*vx + vy*vy + vz*vz) / eta", name = 'Re_m')
-flow.add_property("sqrt(vx*vx + vy*vy + vz*vz)", name = 'flow_speed')
-flow.add_property("sqrt(vx*vx + vy*vy + vz*vz) / sqrt(T)", name = 'Ma')
-flow.add_property("sqrt(Bx*Bx + By*By + Bz*Bz) / sqrt(rho)", name = 'Al_v')
+flow.add_property("sqrt(v@v) / nu", name = 'Re_k')
+flow.add_property("sqrt(v@v) / eta", name = 'Re_m')
+flow.add_property("sqrt(v@v)", name = 'flow_speed')
+flow.add_property("sqrt(v@v) / sqrt(T)", name = 'Ma')
+flow.add_property("sqrt(B@B) / sqrt(rho)", name = 'Al_v')
 flow.add_property("T", name = 'temp')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
 CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 1, safety = CFL_safety,
                      max_change = 1.5, min_change = 0.005, max_dt = output_cadence, threshold = 0.05)
-CFL.add_velocities(('vx', 'vy', 'vz'))
-CFL.add_velocities(('Va_x', 'Va_y', 'Va_z'))
-CFL.add_velocities(( 'Cs', 'Cs', 'Cs'))
+CFL.add_velocity('v')
+CFL.add_velocity('Va')
+CFL.add_velocity( 'Cs')
 
 
 good_solution = True
@@ -335,9 +286,7 @@ try:
             logger.info(logger_string)
             np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
             np.clip(T['g'], 0.001, 1000, out=T['g'])
-            np.clip(vx['g'], -100, 100, out=vx['g'])
-            np.clip(vy['g'], -100, 100, out=vy['g'])
-            np.clip(vz['g'], -100, 100, out=vz['g'])
+            np.clip(v['g'], -100, 100, out=v['g'])
             #np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
             if not np.isfinite(Re_k_avg):
                 good_solution = False
@@ -346,16 +295,9 @@ try:
                 good_solution = False
                 logger.info("Terminating run. Trapped on magnetic Reynolds = {}".format(Re_m_avg))
 
-
 except:
     logger.error('Exception raised, triggering end of main loop.')
     raise
 finally:
-    end_time = time.time()
-    logger.info('Iterations: %i' %solver.iteration)
-    logger.info('Sim end time: %f' %solver.sim_time)
-    logger.info('Run time: %.2f sec' %(end_time-start_time))
-    logger.info('Run time: %f cpu-hr' %((end_time-start_time)/60/60*domain.dist.comm_cart.size))
-    logger.info('Iter/sec: {:g}'.format(solver.iteration/(end_time-start_time)))
-
+    solver.log_stats()
 
