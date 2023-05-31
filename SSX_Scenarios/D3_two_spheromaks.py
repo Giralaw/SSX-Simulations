@@ -168,8 +168,6 @@ def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L
     #####################################################################
     """ Setting up the problem in dedalus. """
     #####################################################################
-    # Find out if an equivalent to meta parameters exists in D3
-    #####################################################################
     """ Creating fields/variables """
     # Current density components
     #####################################################################
@@ -212,10 +210,50 @@ def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
     B = dist.VectorField(coords, name='B', bases=(xbasis, ybasis, zbasis))
 
+    """ Meta Parameters """
+    #####################################################################
+    #Not sure how to specify the dimensions/which 
+    #components of the direct product yet, but we generally want:
+
+    # A['c'][0][y,z][0::2] = 0
+    # A['c'][0][x][1::2] = 0
+    # A['c'][1][x,z][0::2] = 0
+    # A['c'][1][y][1::2] = 0
+    # A['c'][0][x,y][0::2] = 0
+    # A['c'][0][z][1::2] = 0
+
+    # J['c'][0][y,z][0::2] = 0
+    # J['c'][0][x][1::2] = 0
+    # J['c'][1][x,z][0::2] = 0
+    # J['c'][1][y][1::2] = 0
+    # J['c'][0][x,y][0::2] = 0
+    # J['c'][0][z][1::2] = 0
+
+    #Former meta:
+    # problem.meta['Ax']['y', 'z']['parity'] =  -1
+    # problem.meta['Ax']['x']['parity'] = 1
+    # problem.meta['Ay']['x', 'z']['parity'] = -1
+    # problem.meta['Ay']['y']['parity'] = 1
+    # problem.meta['Az']['x', 'y']['parity'] = -1
+    # problem.meta['Az']['z']['parity'] = 1
+
+    # J0_x.meta['y', 'z']['parity'] = -1
+    # J0_x.meta['x']['parity'] = 1
+    # J0_y.meta['x', 'z']['parity'] = -1
+    # J0_y.meta['y']['parity'] = 1
+    # J0_z.meta['x', 'y']['parity'] = -1
+    # J0_z.meta['z']['parity'] = 1
+
+
     # Translation of nx,ny,nz conditions in D2 version?
-    A['c'][0] = 0
-    A['c'][1] = 0
-    A['c'][2] = 0
+    # No, I don't think this is right. For one, it's just the 
+    # Components in general - would need another subscript/index for elements
+    # of [0],[1],[2]
+    # Also, the integ(A) = 0 should already address the nx,ny,nz conds.
+    # Will keep commented out for now.
+    # A['c'][0] = 0
+    # A['c'][1] = 0
+    # A['c'][2] = 0
 
     tau_phi = dist.VectorField(coords, name='tau_phi')
     # grad_A = d3.grad(A)
@@ -225,12 +263,9 @@ def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L
     #####################################################################
     """ Force Free Equations/Spheromak """
     #####################################################################
-    # Currently unable to get square system.
-    # Unsure what vars/equations to add to make up for removal of "condition" equations that were in D2 version
-    # tau_phi doesn't seem to resolve issue; in particular because solver says it makes this nonlinear
 
     # lap(A) = -J
-    # This... seems to work? But integ(A) being used to get div(A) = 0 doesn't make sense to me, yet.
+    # This... seems to work? But integ(A) being used to get div(A) = 0 doesn't make sense to me, yet. (or do we not need div(A) = 0?)
     # Need to come up with a good way to check if what this gives is correct. Add a task to this to make an h5 file that saves A.
     problem.add_equation("lap(A) + tau_phi =  -J")
     problem.add_equation("integ(A) = 0")
@@ -255,8 +290,6 @@ def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L
     #####################################################################
     solver = problem.build_solver()
     solver.solve()
-
-    # print("B is", B['g'][0], B['g'][1], B['g'][2])
 
     #analysis
     # Not sure how to add analysis tasks for a non-IVP. Just want to be able to see B field itself.
@@ -333,10 +366,13 @@ def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
 
 # main function which calls getS,GetS1, and spheromak_A
 def spheromak_1(nx, ny, nz, mesh, coords, dist):
-    aa_1,aa2,aa3 = spheromak_A(nx, ny, nz, mesh, coords, dist)
+    aa_1,aa_2,aa_3 = spheromak_A(nx, ny, nz, mesh, coords, dist)
+    print(aa_1)
+    print(aa_2)
+    print(aa_3)
     #aa_x_2, aa_y_2, aa_z_2 = spheromak_B(coords)
     
-    return aa_1,aa2,aa3
+    return aa_1,aa_2,aa_3
 
 # Also leaving this function alone until we need it
 def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
