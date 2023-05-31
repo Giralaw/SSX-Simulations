@@ -169,6 +169,47 @@ A['g'][0] = aa1 # *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 A['g'][1] = aa2
 A['g'][2] = aa3
 
+
+# Frame for meta params in D3 with RealFourier
+# (need to get multi-basis syntax for specifying coeff values in dir prods down first).
+
+    # A['c'][0][y,z][0::2] = 0
+    # A['c'][0][x][1::2] = 0
+    # A['c'][1][x,z][0::2] = 0
+    # A['c'][1][y][1::2] = 0
+    # A['c'][0][x,y][0::2] = 0
+    # A['c'][0][z][1::2] = 0
+
+    # v['c'][0][y,z][1::2] = 0
+    # v['c'][0][x][0::2] = 0
+    # v['c'][1][x,z][1::2] = 0
+    # v['c'][1][y][0::2] = 0
+    # v['c'][0][x,y][1::2] = 0
+    # v['c'][0][z][0::2] = 0
+
+    #T['c'][1::2] = 0
+    #lnrho['c'][1::2] = 0
+    #phi['c'][0::2] = 0
+
+#Former meta params in D2
+# SSX.meta['T','lnrho']['x', 'y', 'z']['parity'] = 1
+# #SSX.meta['eta1']['x', 'y', 'z']['parity'] = 1
+# SSX.meta['phi']['x', 'y', 'z']['parity'] = -1
+
+# SSX.meta['vx']['y', 'z']['parity'] =  1
+# SSX.meta['vx']['x']['parity'] = -1
+# SSX.meta['vy']['x', 'z']['parity'] = 1
+# SSX.meta['vy']['y']['parity'] = -1
+# SSX.meta['vz']['x', 'y']['parity'] = 1
+# SSX.meta['vz']['z']['parity'] = -1
+
+# SSX.meta['Ax']['y', 'z']['parity'] =  -1
+# SSX.meta['Ax']['x']['parity'] = 1
+# SSX.meta['Ay']['x', 'z']['parity'] = -1
+# SSX.meta['Ay']['y']['parity'] = 1
+# SSX.meta['Az']['x', 'y']['parity'] = -1
+# SSX.meta['Az']['z']['parity'] = 1
+
 #initial velocity
 max_vel = 0.1
 ##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
