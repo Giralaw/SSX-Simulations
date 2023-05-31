@@ -1,6 +1,6 @@
 """SSX_model_A.py
 
-This is the *simplest* model we will consider for modelling spheromaks evolving in the SSX wind tunnel.
+This is the *simplest* model we will consider for modeling spheromaks evolving in the SSX wind tunnel.
 
 Major simplifications fall in two categories
 
@@ -43,7 +43,7 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 32
+nx = 32 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
 ny = 32
 nz = 160
 r = 1
@@ -85,10 +85,10 @@ phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
 tau_A = dist.Field(name='tau_A')
 
 # Substitutions
-ex, ey, ez = coords.unit_vector_fields(dist)
-dx = lambda C: d3.Differentiate(C, coords['x'])
-dy = lambda C: d3.Differentiate(C, coords['y'])
-dz = lambda C: d3.Differentiate(C, coords['z'])
+# ex, ey, ez = coords.unit_vector_fields(dist)
+# dx = lambda C: d3.Differentiate(C, coords['x'])
+# dy = lambda C: d3.Differentiate(C, coords['y'])
+# dz = lambda C: d3.Differentiate(C, coords['z'])
 B = d3.curl(A)
 
 # Coulomb Gauge implies J = -Laplacian(A)
@@ -136,7 +136,7 @@ logger.info("Solver built")
 dt = 1e-4
 
 # Integration parameters
-solver.stop_sim_time = 20
+solver.stop_sim_time = 2 #historically 20
 solver.stop_wall_time = 60*60*3
 solver.stop_iteration = np.inf
 
@@ -163,9 +163,11 @@ rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
 # Spheromak initial condition
-aa = spheromak_1(coords)
+aa1,aa2,aa3 = spheromak_1(nx, ny, nz, mesh, coords, dist)
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-A['g'] = aa*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
+A['g'][0] = aa1 # *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
+A['g'][1] = aa2
+A['g'][2] = aa3
 
 #initial velocity
 max_vel = 0.1
@@ -207,7 +209,7 @@ for i in range(x.shape[0]):
 ##fullGrid[i][j][k] = np.tanh(40*r+40)*(fullGrid[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(fullGrid[i][j][k]-rho_min)/2 + rho_min #tanh transistion
 
 ##########################################################################################################################################
-#-----------------------------------------------sinusodial transistion-----------------------------------------------------------------------------#
+#-----------------------------------------------sinusodial transition-----------------------------------------------------------------------------#
 ##########################################################################################################################################
             if(r <= 1 - lambda_rho1):
                fullGrid[i][j][k] = fullGrid[i][j][k]
@@ -235,7 +237,7 @@ checkpoint.add_system(solver.state, layout='c')'''
 field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
 # trying to just put j for third one yields issues - because j not variable in problem?
 field_writes.add_task(v)
-field_writes.add_task(B)
+field_writes.add_task(B, name = 'B')
 field_writes.add_task(d3.curl(B), name='j')
 field_writes.add_task(np.exp(lnrho), name = 'rho') #exp not defined?
 field_writes.add_task(T)
@@ -256,6 +258,11 @@ load_writes.add_task(A)
 load_writes.add_task(lnrho)
 load_writes.add_task(T)
 load_writes.add_task(phi)
+
+# Helicity
+helicity_writes = solver.evaluator.add_file_handler('helicity', max_writes=500, sim_dt=output_cadence, mode='overwrite')
+helicity_writes.add_task(d3.integ(A@B), name="total_helicity")
+helicity_writes.add_task(A@B, name="helicity_at_pos")
 
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)

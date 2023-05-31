@@ -17,7 +17,7 @@ Ly = 2.
 Lz = 1.
 
 nx = 64
-ny = 2 #2; or 64 for full 3D
+ny = 64 #2; or 64 for full 3D
 nz = 64
 
 Ha = 20. #20, 10, 1, or 0 (Pouiselle flow)
@@ -26,7 +26,7 @@ Rm = 1.
 Pi = 1.
 tau = 0.1
 
-stop_time = 1 #5 or 10
+stop_time = 10 #5 or 10
 data_dir = "scratch" #change each time or overwrite
 
 dealias = 3/2

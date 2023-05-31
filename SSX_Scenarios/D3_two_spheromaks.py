@@ -129,7 +129,7 @@ def getS(r, z, L, R, zCenter):
     S = r1 * z1
     return S
 
-def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
+def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """
     This function returns the intial 2X-spheromak vector potential components (x, y, z).
     J0 - Current density
@@ -143,16 +143,16 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     # B0 should always be 1, but we are leaving it as a parameter for safe keeping.
     """
 
-    nx = 32
-    ny = 32
-    nz = 160
+    nx = nx
+    ny = ny
+    nz = ny
     r = 1
     length = 10
     mesh = None #[16,16]
     data_dir = "scratch_init"
-    # dist = dist
-    # coords = coords
-    dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
+    dist = dist
+    coords = coords
+    # dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
     # ex, ey, ez = coords.unit_vector_fields(dist)
     xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
     ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
@@ -210,7 +210,7 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """ Initialize the problem """
     #####################################################################
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
-    B = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
+    B = dist.VectorField(coords, name='B', bases=(xbasis, ybasis, zbasis))
 
     # Translation of nx,ny,nz conditions in D2 version?
     A['c'][0] = 0
@@ -242,8 +242,12 @@ def spheromak_A(coords, center=(0,0,0), B0 = 1, R = 1, L = 1):
 
     # First order form and phi off of Hartmann?
     # But this is an lbvp, not ivp, and phi showed up in d/dt equation, so it doesn't seem like phi would be relevant here
-    # problem.add_equation("trace(grad_A) + tau_phi = 0")
+    # problem.add_equation("div(A) + tau_phi = 0") # (make tau_phi a scalar)
     # problem.add_equation("integ(phi) = 0")
+
+    # Former equation structure:
+    #problem.add_equation("dx(dx(Az)) + dy(dy(Az)) + dz(dz(Az)) =  -J0_z", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
+    # problem.add_equation("Az = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
 
     #####################################################################
     """ Building the solver """
@@ -328,11 +332,11 @@ def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
     return solver.state['Ax']['g'], solver.state['Ay']['g'], solver.state['Az']['g']
 
 # main function which calls getS,GetS1, and spheromak_A
-def spheromak_1(coords = d3.CartesianCoordinates('x', 'y','z')):
-    aa_1 = spheromak_A(coords)
+def spheromak_1(nx, ny, nz, mesh, coords, dist):
+    aa_1,aa2,aa3 = spheromak_A(nx, ny, nz, mesh, coords, dist)
     #aa_x_2, aa_y_2, aa_z_2 = spheromak_B(coords)
     
-    return aa_1
+    return aa_1,aa2,aa3
 
 # Also leaving this function alone until we need it
 def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
