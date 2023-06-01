@@ -43,8 +43,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 32 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-ny = 32
+nx = 16 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+ny = 16
 nz = 160
 r = 1
 length = 10
@@ -52,7 +52,7 @@ length = 10
 # for 3D runs, you can divide the work up over two dimensions (x and y).
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
-mesh = None
+mesh = [2,2]
 #mesh = [16,16]
 data_dir = "scratch" #change each time or overwrite
 
@@ -150,10 +150,9 @@ solver.stop_iteration = np.inf
 # v = solver.state['v']
 #eta1 = solver.state['eta1']
 
-x,y,z = xbasis.global_grid(), ybasis.global_grid(), zbasis.global_grid()
+x,y,z = dist.local_grids(xbasis,ybasis,zbasis)
 fullGrid = x*y*z
 
-fullGrid1 = x*y*z
 # Initial condition parameters
 R = r
 L = R
@@ -163,11 +162,11 @@ rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
 # Spheromak initial condition
-aa1,aa2,aa3 = spheromak_1(nx, ny, nz, mesh, coords, dist)
+
+aa = spheromak_1(xbasis,ybasis,zbasis, coords, dist)
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-A['g'][0] = aa1 # *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
-A['g'][1] = aa2
-A['g'][2] = aa3
+for i in range(3):
+    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 
 
 # Frame for meta params in D3 with RealFourier
@@ -214,6 +213,7 @@ A['g'][2] = aa3
 max_vel = 0.1
 ##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
+#should always use local grid - never loop over things like this
 
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
@@ -301,7 +301,7 @@ load_writes.add_task(T)
 load_writes.add_task(phi)
 
 # Helicity
-helicity_writes = solver.evaluator.add_file_handler('helicity', max_writes=500, sim_dt=output_cadence, mode='overwrite')
+helicity_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=500, sim_dt=output_cadence, mode='overwrite')
 helicity_writes.add_task(d3.integ(A@B), name="total_helicity")
 helicity_writes.add_task(A@B, name="helicity_at_pos")
 
@@ -331,8 +331,13 @@ try:
     logger_string = 'kappa: {:.3g}, mu: {:.3g}, eta: {:.3g}, dt: {:.3g}'.format(kappa, mu, eta, dt)
     logger.info(logger_string)
     while solver.proceed:
+
         dt = CFL.compute_timestep()
         solver.step(dt)
+        # A['c'][0, 1::2, 0::2, 0::2] = 0
+        # A['c'][1,0::2, 1::2, 0::2] = 0
+        # A['c'][2, 0::2, 0::2, 1::2] = 0
+        # put in function for parity, all dynamical variables with sin/cos rules put here for each timestep
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)

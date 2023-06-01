@@ -129,7 +129,7 @@ def getS(r, z, L, R, zCenter):
     S = r1 * z1
     return S
 
-def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L = 1):
+def spheromak_A(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """
     This function returns the intial 2X-spheromak vector potential components (x, y, z).
     J0 - Current density
@@ -142,21 +142,12 @@ def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L
     J0 = S(r) lam [ -pi J1(a, r) cos(pi z) rhat + lam*J1(a, r)*sin(pi z)     Eq. (9)
     # B0 should always be 1, but we are leaving it as a parameter for safe keeping.
     """
-
-    nx = nx
-    ny = ny
-    nz = ny
     r = 1
     length = 10
-    mesh = None #[16,16]
+    #mesh = None #[16,16]
     data_dir = "scratch_init"
-    dist = dist
-    coords = coords
     # dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
     # ex, ey, ez = coords.unit_vector_fields(dist)
-    xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
-    ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
-    zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length))
 
     j1_zero1 = jn_zeros(1,1)[0]
     kr = j1_zero1/R
@@ -208,19 +199,14 @@ def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L
     """ Initialize the problem """
     #####################################################################
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
-    B = dist.VectorField(coords, name='B', bases=(xbasis, ybasis, zbasis))
 
     """ Meta Parameters """
     #####################################################################
-    #Not sure how to specify the dimensions/which 
     #components of the direct product yet, but we generally want:
 
-    # A['c'][0][y,z][0::2] = 0
-    # A['c'][0][x][1::2] = 0
-    # A['c'][1][x,z][0::2] = 0
-    # A['c'][1][y][1::2] = 0
-    # A['c'][0][x,y][0::2] = 0
-    # A['c'][0][z][1::2] = 0
+    A['c'][0, 1::2, 0::2, 0::2] = 0
+    A['c'][1,0::2, 1::2, 0::2] = 0
+    A['c'][2, 0::2, 0::2, 1::2] = 0
 
     # J['c'][0][y,z][0::2] = 0
     # J['c'][0][x][1::2] = 0
@@ -244,45 +230,22 @@ def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L
     # J0_z.meta['x', 'y']['parity'] = -1
     # J0_z.meta['z']['parity'] = 1
 
-
-    # Translation of nx,ny,nz conditions in D2 version?
-    # No, I don't think this is right. For one, it's just the 
-    # Components in general - would need another subscript/index for elements
-    # of [0],[1],[2]
-    # Also, the integ(A) = 0 should already address the nx,ny,nz conds.
-    # Will keep commented out for now.
-    # A['c'][0] = 0
-    # A['c'][1] = 0
-    # A['c'][2] = 0
-
+    # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis))
     tau_phi = dist.VectorField(coords, name='tau_phi')
-    # grad_A = d3.grad(A)
+    B = d3.curl(A).evaluate()
+    
+    #h5py documentation - write B field into it
 
-    problem = d3.LBVP([A, B, tau_phi],namespace=locals())
-
+    problem = d3.LBVP([A, tau_phi],namespace=locals())
     #####################################################################
     """ Force Free Equations/Spheromak """
     #####################################################################
 
     # lap(A) = -J
-    # This... seems to work? But integ(A) being used to get div(A) = 0 doesn't make sense to me, yet. (or do we not need div(A) = 0?)
-    # Need to come up with a good way to check if what this gives is correct. Add a task to this to make an h5 file that saves A.
-    problem.add_equation("lap(A) + tau_phi =  -J")
-    problem.add_equation("integ(A) = 0")
-    problem.add_equation("curl(A) - B = 0")
-
-    # Could treat J as B instead and do:
-    # problem.add_equation("curl(A) =  J/Lam")
+    # Need to come up with a good way to check if what this gives is correct. Add a task to this to make an h5 file that saves A or B.
+    problem.add_equation("lap(A) + tau_phi =  -J") # + grad(phi)
+    problem.add_equation("integ(A) = 0") #check that this gives divA = 0
     # problem.add_equation("div(A) = 0")
-
-    # First order form and phi off of Hartmann?
-    # But this is an lbvp, not ivp, and phi showed up in d/dt equation, so it doesn't seem like phi would be relevant here
-    # problem.add_equation("div(A) + tau_phi = 0") # (make tau_phi a scalar)
-    # problem.add_equation("integ(phi) = 0")
-
-    # Former equation structure:
-    #problem.add_equation("dx(dx(Az)) + dy(dy(Az)) + dz(dz(Az)) =  -J0_z", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
-    # problem.add_equation("Az = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
 
     #####################################################################
     """ Building the solver """
@@ -296,7 +259,7 @@ def spheromak_A(nx, ny, nz, mesh, coords, dist, center=(0,0,0), B0 = 1, R = 1, L
     # Current method is to just add B to the problem.
     # snapshots.add_task(d3.curl(A), name='Magnetic field')
     
-    return A['g'][0], A['g'][1], A['g'][2]
+    return A
 
 # spheromak_B has not been updated yet: Will leave as was until we have a use for it
 def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
@@ -365,14 +328,11 @@ def spheromak_B(domain, center=(0,0,10), B0 = 1, R=1, L=1):
     return solver.state['Ax']['g'], solver.state['Ay']['g'], solver.state['Az']['g']
 
 # main function which calls getS,GetS1, and spheromak_A
-def spheromak_1(nx, ny, nz, mesh, coords, dist):
-    aa_1,aa_2,aa_3 = spheromak_A(nx, ny, nz, mesh, coords, dist)
-    print(aa_1)
-    print(aa_2)
-    print(aa_3)
+def spheromak_1(xbasis,ybasis,zbasis, coords, dist):
+    aa = spheromak_A(xbasis,ybasis,zbasis, coords, dist)
     #aa_x_2, aa_y_2, aa_z_2 = spheromak_B(coords)
     
-    return aa_1,aa_2,aa_3
+    return aa
 
 # Also leaving this function alone until we need it
 def spheromak(Bx, By, Bz, domain, center = (0, 0, 0), B0 = 1, R = 1, L = 1):
