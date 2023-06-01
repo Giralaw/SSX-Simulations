@@ -24,7 +24,10 @@ equations in Dedalus.
 
 We use the vector potential, and enforce the Coulomb Gauge, div(A) = 0.
 
-Dedalus 3 edits made by Alex Skeldon. Direct all queries to askeldo1@swarthmore.edu (prior to June 2024).
+These two files include a lot of lines and functions that did not appear to be relevant
+for SSX Simulations in Summer 2023, and thus were removed in files for those simulations.
+They are kept here in case these functions turn out to be useful in later SSX work.
+
 """
 
 import time
@@ -35,7 +38,7 @@ import dedalus.public as d3
 from dedalus.extras import flow_tools
 
 
-from D3_two_spheromaks import spheromak_pair, parity
+from D3_two_spheromaks import spheromak_1
 
 import logging
 logger = logging.getLogger(__name__)
@@ -67,9 +70,6 @@ eta_ch = 4.4 * 10**(-3)
 v0_ch = 2.9 * 10**(-2)
 chi = kappa/rho0
 nu = mu/rho0
-#diffusivities for heat (kappa -> chi), momentum (viscosity) (mu -> nu), current (eta)
-# life time of currents regulated by resistivity
-# linearization time of temperature goes like e^-t/kappa
 
 #Coords, dist, bases
 coords = d3.CartesianCoordinates('x', 'y','z')
@@ -90,6 +90,10 @@ tau_A = dist.Field(name='tau_A')
 
 # Substitutions
 # ex, ey, ez = coords.unit_vector_fields(dist)
+# dx = lambda C: d3.Differentiate(C, coords['x'])
+# dy = lambda C: d3.Differentiate(C, coords['y'])
+# dz = lambda C: d3.Differentiate(C, coords['z'])
+B = d3.curl(A)
 
 # Coulomb Gauge implies J = -Laplacian(A)
 #how do we add j into the problem so it can be used in analysis tasks?
@@ -97,7 +101,6 @@ j = dist.VectorField(coords, name ='j', bases = (xbasis, ybasis, zbasis))
 j = -d3.lap(A)
 J2 = j@j
 rho = np.exp(lnrho)
-B = d3.curl(A)
 
 # CFL substitutions
 Va = B/np.sqrt(rho)
@@ -105,6 +108,8 @@ Cs = np.sqrt(gamma*T)
 
 #Problem
 SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
+
+#SSX.meta lines were originally here - as in two-spheromaks, find out if there is d3 equivalent.
 
 #resistivity
 #SSX.add_equation("eta1 = eta_sp/(sqrt(T)**3) + (eta_ch/sqrt(rho))*(1 - exp((-v0_ch*sqrt(J2))/(3*rho*sqrt(gamma*T))))")
@@ -121,6 +126,9 @@ SSX.add_equation("dt(A) + grad(phi) = - eta*j + cross(v,B)")
 #these two should replace the commented equations below?
 SSX.add_equation("div(A) + tau_A = 0")
 SSX.add_equation("integ(phi) = 0")
+#SSX.add_equation("dx(Ax) + dy(Ay) + dz(Az) = 0", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
+#SSX.add_equation("phi = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
+
 
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v)  - v@grad(T) + (gamma - 1)*eta*J2")
@@ -136,6 +144,16 @@ solver.stop_sim_time = 2 #historically 20
 solver.stop_wall_time = 60*60*3
 solver.stop_iteration = np.inf
 
+
+# Initial conditions
+# Do we still need these solver.state lines in D3? Always get complains about list indices; but maybe these are necessary
+# For analysis tasks to recognize the vars?
+# A = solver.state['A']
+# lnrho = solver.state['lnrho']
+# T = solver.state['T']
+# v = solver.state['v']
+#eta1 = solver.state['eta1']
+
 x,y,z = dist.local_grids(xbasis,ybasis,zbasis)
 fullGrid = x*y*z
 
@@ -147,10 +165,10 @@ lambda_rho1 = 0.1
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
-
 # Spheromak initial condition
+
+aa = spheromak_1(xbasis,ybasis,zbasis, coords, dist)
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
 for i in range(3):
     A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 
@@ -158,11 +176,23 @@ for i in range(3):
 # Frame for meta params in D3 with RealFourier
 # (need to get multi-basis syntax for specifying coeff values in dir prods down first).
 
-#A = parity(A,0)
-#v = parity(v,1)
-# T = parity(T,0,scalar=True)
-# lnrho = parity(lnrho,0,scalar=True)
-# phi = parity(phi,1,scalar=True)
+    # A['c'][0][y,z][0::2] = 0
+    # A['c'][0][x][1::2] = 0
+    # A['c'][1][x,z][0::2] = 0
+    # A['c'][1][y][1::2] = 0
+    # A['c'][0][x,y][0::2] = 0
+    # A['c'][0][z][1::2] = 0
+
+    # v['c'][0][y,z][1::2] = 0
+    # v['c'][0][x][0::2] = 0
+    # v['c'][1][x,z][1::2] = 0
+    # v['c'][1][y][0::2] = 0
+    # v['c'][0][x,y][1::2] = 0
+    # v['c'][0][z][0::2] = 0
+
+    #T['c'][1::2] = 0
+    #lnrho['c'][1::2] = 0
+    #phi['c'][0::2] = 0
 
 #Former meta params in D2
 # SSX.meta['T','lnrho']['x', 'y', 'z']['parity'] = 1
