@@ -110,6 +110,13 @@ dt = 1e-3
 
 # Initial conditions are zero by default in all fields
 
+# Makes dir if doesn't exist
+# interesting note: the first if statement handles the checking issue
+# when parallelized across threads.
+if dist.comm.rank == 0:
+    if not os.path.exists(data_dir):
+        os.mkdir(data_dir)
+
 # Analysis
 check = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints'), wall_dt=3540, max_writes=50)
 check.add_tasks(solver.state)

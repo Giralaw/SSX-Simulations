@@ -30,7 +30,7 @@ Dedalus 3 edits made by Alex Skeldon. Direct all queries to askeldo1@swarthmore.
 import time
 import numpy as np
 import os
-
+import sys
 import dedalus.public as d3
 from dedalus.extras import flow_tools
 
@@ -227,6 +227,21 @@ T['g'] = T0 * rho0['g']**(gamma - 1)
 wall_dt_checkpoints = 60*55
 output_cadence = 0.1 # This is in simulation time units
 
+#handle data output dirs
+# I'm realizing the else statement doesn't necessarily work so well for the Bridges job submitting scheme...
+if dist.comm.rank == 0:
+    if not os.path.exists(data_dir):
+        os.mkdir(data_dir)
+    # else:
+    #     ow = input("this directory already exists. Would you like to overwrite it? (y/n) ")
+    #     if ow == 'n':
+    #         name = input("what would you like to name the new directory? ('n' to cancel script) ")
+    #         if name == 'n':
+    #             print("please press ctrl-c.")
+    #             quit()
+    #         else:
+    #             os.mkdir(name)
+
 '''checkpoint = solver.evaluator.add_file_handler('checkpoints2', max_writes=1, wall_dt=wall_dt_checkpoints, mode='overwrite')
 checkpoint.add_system(solver.state, layout='c')'''
 
@@ -311,7 +326,7 @@ try:
             np.clip(T['g'], 0.001, 1000, out=T['g'])
             np.clip(v['g'], -100, 100, out=v['g'])
             ##np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
-            
+
             if not np.isfinite(Re_k_avg):
                 good_solution = False
                 logger.info("Terminating run.  Trapped on Reynolds = {}".format(Re_k_avg))
