@@ -190,17 +190,9 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
 
     #Meta/Parity specifiers
-    #Added function in this version to handle our parity combinations.
+    # e.g. A_i is even in i-basis, odd in other two (see func further below)
     A = parity(A,0)
     J = parity(J,0)
-    
-    # A['c'][0, 1::2, 0::2, 0::2] = 0
-    # A['c'][1,0::2, 1::2, 0::2] = 0
-    # A['c'][2, 0::2, 0::2, 1::2] = 0
-
-    # J['c'][0, 1::2, 0::2, 0::2] = 0
-    # J['c'][1,0::2, 1::2, 0::2] = 0
-    # J['c'][2, 0::2, 0::2, 1::2] = 0
 
     # phi field not necessary if integ(A) is correct gauge
     # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis));
@@ -231,13 +223,12 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
 
 def parity(initfield, par, scalar=False):
 #enforce meta parity parameters on fields - 0 is even/cosine, 1 is odd/sine
-# Works for our 2:1 parity cycles and scalar fields- not as general as it could be.
+# Works for our 2:1 parity cycles and scalar fields- not general for any combination.
     if scalar == True:
         initfield['c'][1-par::2,1-par::2,1-par::2] = 0
     else:
         initfield['c'][0, 1-par::2, par::2, par::2] = 0
         initfield['c'][1, par::2, 1-par::2, par::2] = 0
         initfield['c'][2, par::2, par::2, 1-par::2] = 0
-        
 
     return initfield

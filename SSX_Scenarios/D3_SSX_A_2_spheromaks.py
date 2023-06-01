@@ -158,37 +158,18 @@ for i in range(3):
 # Frame for meta params in D3 with RealFourier
 # (need to get multi-basis syntax for specifying coeff values in dir prods down first).
 
-#A = parity(A,0)
-#v = parity(v,1)
-# T = parity(T,0,scalar=True)
-# lnrho = parity(lnrho,0,scalar=True)
-# phi = parity(phi,1,scalar=True)
+A = parity(A,0)
+v = parity(v,1)
+T = parity(T,0,scalar=True)
+lnrho = parity(lnrho,0,scalar=True)
+phi = parity(phi,1,scalar=True)
 
-#Former meta params in D2
-# SSX.meta['T','lnrho']['x', 'y', 'z']['parity'] = 1
-# #SSX.meta['eta1']['x', 'y', 'z']['parity'] = 1
-# SSX.meta['phi']['x', 'y', 'z']['parity'] = -1
-
-# SSX.meta['vx']['y', 'z']['parity'] =  1
-# SSX.meta['vx']['x']['parity'] = -1
-# SSX.meta['vy']['x', 'z']['parity'] = 1
-# SSX.meta['vy']['y']['parity'] = -1
-# SSX.meta['vz']['x', 'y']['parity'] = 1
-# SSX.meta['vz']['z']['parity'] = -1
-
-# SSX.meta['Ax']['y', 'z']['parity'] =  -1
-# SSX.meta['Ax']['x']['parity'] = 1
-# SSX.meta['Ay']['x', 'z']['parity'] = -1
-# SSX.meta['Ay']['y']['parity'] = 1
-# SSX.meta['Az']['x', 'y']['parity'] = -1
-# SSX.meta['Az']['z']['parity'] = 1
 
 #initial velocity
 max_vel = 0.1
 ##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
-#should always use local grid - never loop over things like this
-
+#should always use local grid - never loop over things like this - talk to Jeff about in future call.
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
     for j in range(y.shape[1]):
@@ -308,10 +289,13 @@ try:
 
         dt = CFL.compute_timestep()
         solver.step(dt)
-        # A['c'][0, 1::2, 0::2, 0::2] = 0
-        # A['c'][1,0::2, 1::2, 0::2] = 0
-        # A['c'][2, 0::2, 0::2, 1::2] = 0
-        # put in function for parity, all dynamical variables with sin/cos rules put here for each timestep
+
+        # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
+        A = parity(A,0)
+        v = parity(v,1)
+        T = parity(T,0,scalar=True)
+        lnrho = parity(lnrho,0,scalar=True)
+        phi = parity(phi,1,scalar=True)
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
@@ -322,10 +306,12 @@ try:
             Al_v_avg = flow.grid_average('Al_v')
             logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'))
             logger.info(logger_string)
+
             np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
             np.clip(T['g'], 0.001, 1000, out=T['g'])
             np.clip(v['g'], -100, 100, out=v['g'])
             ##np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
+            
             if not np.isfinite(Re_k_avg):
                 good_solution = False
                 logger.info("Terminating run.  Trapped on Reynolds = {}".format(Re_k_avg))
