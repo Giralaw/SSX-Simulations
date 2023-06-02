@@ -126,14 +126,19 @@ SSX.add_equation("integ(phi) = 0")
 SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v)  - v@grad(T) + (gamma - 1)*eta*J2")
 
 solver = SSX.build_solver(d3.RK222) #switch to RK222? (formerly 443)
+
+#put solver.load_state here? Does it matter where?
+#solver.load_state("scratch/load_data_two/load_data_two_s1.h5")
+# solver.load_state("scratch/load_data_two/load_data_two_s1/load_data_two_s1_p1.h5")
+
 logger.info("Solver built")
 
 # Initial timestep
 dt = 1e-4
 
 # Integration parameters
-solver.stop_sim_time = 2 #historically 20
-solver.stop_wall_time = 60*60*3
+solver.stop_sim_time = 20 #historically 20
+solver.stop_wall_time = np.inf #60*60*3 would limit runtime to three hours
 solver.stop_iteration = np.inf
 
 x,y,z = dist.local_grids(xbasis,ybasis,zbasis)
@@ -224,8 +229,11 @@ T['g'] = T0 * rho0['g']**(gamma - 1)
 
 # analysis output
 ##data_dir = './'+sys.argv[0].split('.py')[0]
-wall_dt_checkpoints = 60*55
+wall_dt_checkpoints = 20
 output_cadence = 0.1 # This is in simulation time units
+
+fh_mode = 'overwrite'
+# solver.load_state("scratch/load_data_two/load_data_two_s1.h5")
 
 #handle data output dirs
 # I'm realizing the else statement doesn't necessarily work so well for the Bridges job submitting scheme...
@@ -242,10 +250,13 @@ if dist.comm.rank == 0:
     #         else:
     #             os.mkdir(name)
 
-'''checkpoint = solver.evaluator.add_file_handler('checkpoints2', max_writes=1, wall_dt=wall_dt_checkpoints, mode='overwrite')
-checkpoint.add_system(solver.state, layout='c')'''
+#get error about list object having no attribute 'fields'
+# Will revisit tomorrow
+# checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, wall_dt=wall_dt_checkpoints, mode = fh_mode)
+# checkpoint.add_system(solver.state)
 
-field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
+
+field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 500, sim_dt = output_cadence, mode = fh_mode)
 # trying to just put j for third one yields issues - because j not variable in problem?
 field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
@@ -256,22 +267,24 @@ field_writes.add_task(T)
 
 # complaint about floats not having a dtype - can comment this out, but is probably nice
 # to have parameters in h5 file with rest of scenario
-parameter_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'parameters_two'), max_writes = 1, sim_dt = output_cadence, mode = 'overwrite')
+# parameter_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'parameters_two'), max_writes = 1, sim_dt = output_cadence, mode = fh_mode)
 # parameter_writes.add_task(mu)
 # parameter_writes.add_task(eta)
 # parameter_writes.add_task(nu)
 # parameter_writes.add_task(chi)
 # parameter_writes.add_task(gamma)
 
-load_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'load_data_two'), max_writes = 500, sim_dt = output_cadence, mode = 'overwrite')
+#is there a way to make it so that sim_dt = solver.stop_sim_time/max_writes?
+load_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'load_data_two'), max_writes = 50, sim_dt = 4*output_cadence, mode = fh_mode)
 load_writes.add_task(v)
 load_writes.add_task(A)
 load_writes.add_task(lnrho)
 load_writes.add_task(T)
 load_writes.add_task(phi)
+load_writes.add_task(tau_A)
 
 # Helicity
-helicity_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=500, sim_dt=output_cadence, mode='overwrite')
+helicity_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=500, sim_dt = 2*output_cadence, mode=fh_mode)
 helicity_writes.add_task(d3.integ(A@B), name="total_helicity")
 helicity_writes.add_task(A@B, name="helicity_at_pos")
 
