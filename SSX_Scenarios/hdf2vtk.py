@@ -46,7 +46,8 @@ if __name__ == "__main__":
         raise NotImplementedError("hdf2vtk only supports 3D data.")
 
     # currently cartesian only
-    scale_names = [H5_SCALE_PATH+d.decode(H5_STR_DECODE) for d in dim_labels]
+    #scale_names = [H5_SCALE_PATH+d.decode(H5_STR_DECODE) for d in dim_labels]
+    scale_names = [H5_SCALE_PATH+d for d in dim_labels]
     # just get first scale you find...
 
     # These two lines are from Jeff version, probably older

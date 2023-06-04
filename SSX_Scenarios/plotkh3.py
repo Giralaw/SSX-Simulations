@@ -15,16 +15,21 @@ if(len(sys.argv) != 2):
 else:
     it = int(sys.argv[1])
 
-with h5py.File("analysis_tasks/analysis_tasks_s1.h5", mode='r') as file:
-    S = file['tasks']['S']
-    t = S.dims[0]['sim_time']
+# with h5py.File("2Sph_Run4_TandRhobad/scratch/fields_two/fields_two_s1.h5", mode='r') as file:   
+with h5py.File("DataFolders/D3_SSX_Run1/fields_two/fields_two_s1.h5", mode='r') as file:
+    S = file['tasks']['rho']
+    #t = S.dims[0]['sim_time']
+    #t = file['scales']['sim_time']
+
+    #these four are the variables formatted normally
+    t = S.dims[0]
     x = S.dims[1][0]
     y = S.dims[2][0]
     z = S.dims[3][0]
 
-    nx = 96
-    ny = 48
-    nz = 128
+    nx = 64
+    ny = 64
+    nz = 640
 
     X, Y, Z = np.mgrid[0:nx, 0:ny, 0:nz]
 
@@ -47,11 +52,12 @@ with h5py.File("analysis_tasks/analysis_tasks_s1.h5", mode='r') as file:
 
     fig.update_layout(scene_camera=camera,title='isosurfaces',
                       margin=dict(t=0,l=0,b=0),
-                      scene=dict(xaxis=dict(title='streamwise'),
-                                 yaxis=dict(title='spanwise'),
-                                zaxis=dict(title='vertical')))
+                      scene=dict(xaxis=dict(title='x'),
+                                 yaxis=dict(title='y'),
+                                zaxis=dict(title='z (lengthwise)')))
     fig.update_layout(scene_aspectmode='manual',
                       scene_aspectratio=dict(x=1,y=1,z=1))
     
     fname = "kh3iso.png"
+    print("where we at")
     fig.write_image(fname)

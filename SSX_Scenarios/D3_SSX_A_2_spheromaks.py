@@ -215,6 +215,7 @@ for i in range(x.shape[0]):
                fullGrid[i][j][k] = rho_min
 
 #figure out what the whole deal with rho0 is - also def as const at start
+#probably better way to rewrite this without the rho0 field
 rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
 rho0['g'] = fullGrid
 
