@@ -91,9 +91,12 @@ def plot_fit_b_z(func, x_array, y_array, i):
    
     
 def hartmann_errors():
-        data = h5py.File("./scratch2/integrals/integrals_s1.h5", "r")
+        data = h5py.File("./Full3DHartmannRunData/integrals/integrals_s1.h5", "r")
         # y = data['scales/y_hash_f08571fe67493aa5454ad70f13fdb247e5cbe449/'][:]
         z = (data['scales/z_hash_24c956bcc02c8dc6378aaf5ce148dd993d0851b1/'][:]) #changed based on what your h5 file's z label is
+        # there's supposedly a better way to handle spatial dimensions (i.e. you don't
+        # have to write the hash label) based off mailing list discussion
+        # But I don't yet know what it is
         # x   = data['tasks/<vx>_xy'][:]
         bz = data['tasks/<Bx>_xy'][-1,0,0,:]*20
         vxz = data['tasks/<vx>_xy'][-1,0,-1,:]

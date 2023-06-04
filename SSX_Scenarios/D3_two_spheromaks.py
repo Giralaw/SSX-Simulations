@@ -207,7 +207,7 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
 
     # lap(A) = -J
     # Need to come up with a good way to check if what this gives is correct. Add a task to this to make an h5 file that saves A or B.
-    problem.add_equation("lap(A) + tau_phi =  -J") # + grad(phi)
+    problem.add_equation("lap(A) + tau_phi =  -J") # + grad(phi) term for Div(A) case
     problem.add_equation("integ(A) = 0") #check that this gives divA = 0
     # problem.add_equation("div(A) = 0")
 

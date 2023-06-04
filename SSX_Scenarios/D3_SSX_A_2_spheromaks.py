@@ -46,7 +46,7 @@ logger = logging.getLogger(__name__)
 # should be a multiple of 128.
 nx = 16 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
 ny = 16
-nz = 160
+nz = 160 # try power of two for nz? e.g. 512?
 r = 1
 length = 10
 
@@ -58,9 +58,9 @@ mesh = [2,2]
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.01
-mu = 0.05
-eta = 0.001
-rho0 = 1
+mu = 0.05 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
+eta = 0.001 # Determines Re_m ; 0.001 -> Re_m = 1000
+rho0 = 1 #rho0 is redefined later, and generally has a whole
 gamma = 5./3.
 eta_sp = 2.7 * 10**(-4)
 eta_ch = 4.4 * 10**(-3)
@@ -87,13 +87,10 @@ lnrho = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
 T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
 phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
 tau_A = dist.Field(name='tau_A')
-
-# Substitutions
 # ex, ey, ez = coords.unit_vector_fields(dist)
 
 # Coulomb Gauge implies J = -Laplacian(A)
-#how do we add j into the problem so it can be used in analysis tasks?
-j = dist.VectorField(coords, name ='j', bases = (xbasis, ybasis, zbasis))
+# j = dist.VectorField(coords, name ='j', bases = (xbasis, ybasis, zbasis))
 j = -d3.lap(A)
 J2 = j@j
 rho = np.exp(lnrho)
@@ -127,10 +124,6 @@ SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) 
 
 solver = SSX.build_solver(d3.RK222) #switch to RK222? (formerly 443)
 
-#put solver.load_state here? Does it matter where?
-#solver.load_state("scratch/load_data_two/load_data_two_s1.h5")
-# solver.load_state("scratch/load_data_two/load_data_two_s1/load_data_two_s1_p1.h5")
-
 logger.info("Solver built")
 
 # Initial timestep
@@ -138,7 +131,7 @@ dt = 1e-4
 
 # Integration parameters
 solver.stop_sim_time = 20 #historically 20
-solver.stop_wall_time = np.inf #60*60*3 would limit runtime to three hours
+solver.stop_wall_time = np.inf #e.g. 60*60*3 would limit runtime to three hours
 solver.stop_iteration = np.inf
 
 x,y,z = dist.local_grids(xbasis,ybasis,zbasis)
@@ -174,6 +167,8 @@ phi = parity(phi,1,scalar=True)
 max_vel = 0.1
 ##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
+# Maybe write your versions of how you think these hardcodings should go,
+# then ask jeff to have a call just to specifically Discuss this issue
 #should always use local grid - never loop over things like this - talk to Jeff about in future call.
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
@@ -219,6 +214,7 @@ for i in range(x.shape[0]):
             else:
                fullGrid[i][j][k] = rho_min
 
+#figure out what the whole deal with rho0 is - also def as const at start
 rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
 rho0['g'] = fullGrid
 
@@ -229,11 +225,15 @@ T['g'] = T0 * rho0['g']**(gamma - 1)
 
 # analysis output
 ##data_dir = './'+sys.argv[0].split('.py')[0]
-wall_dt_checkpoints = 20
+wall_dt_checkpoints = 2
 output_cadence = 0.1 # This is in simulation time units
 
 fh_mode = 'overwrite'
+
+# load state for restart - does it matter where to put it?
+# also, does the virtual file work for restarting
 # solver.load_state("scratch/load_data_two/load_data_two_s1.h5")
+# solver.load_state("scratch/load_data_two/load_data_two_s1/load_data_two_s1_p1.h5")
 
 #handle data output dirs
 # I'm realizing the else statement doesn't necessarily work so well for the Bridges job submitting scheme...
@@ -250,10 +250,9 @@ if dist.comm.rank == 0:
     #         else:
     #             os.mkdir(name)
 
-#get error about list object having no attribute 'fields'
 # Will revisit tomorrow
-# checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, wall_dt=wall_dt_checkpoints, mode = fh_mode)
-# checkpoint.add_system(solver.state)
+checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, wall_dt=wall_dt_checkpoints, mode = fh_mode)
+checkpoint.add_tasks(solver.state)
 
 
 field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 500, sim_dt = output_cadence, mode = fh_mode)
@@ -261,7 +260,8 @@ field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_t
 field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
 field_writes.add_task(d3.curl(B), name='j')
-field_writes.add_task(np.exp(lnrho), name = 'rho') #exp not defined?
+#Supposed to enforce positive rho, but still seeing negative numbers in h5 reader
+field_writes.add_task(np.exp(lnrho), name = 'rho')
 field_writes.add_task(T)
 # field_writes.add_task(eta1)
 
