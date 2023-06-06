@@ -24,6 +24,10 @@ equations in Dedalus.
 
 We use the vector potential, and enforce the Coulomb Gauge, div(A) = 0.
 
+File formerly called D3_SSX_A_2_spheromaks
+- when looking for older versions, check both current name and that name.
+
+
 Dedalus 3 edits made by Alex Skeldon. Direct all queries to askeldo1@swarthmore.edu (prior to June 2024).
 """
 
@@ -294,7 +298,7 @@ flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
 flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
 flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
 flow.add_property(np.sqrt(v@v), name = 'flow_speed')
-flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma')
+flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
 flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
 flow.add_property(T, name = 'temp')
 

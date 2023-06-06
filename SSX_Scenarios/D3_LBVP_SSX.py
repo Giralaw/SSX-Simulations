@@ -5,6 +5,9 @@ import matplotlib.pyplot as plt
 
 #See "Turbulence analysis of an experimental flux-rope plasma", D A Schaffner et al, 2014.
 
+# File formerly called "D3_two_spheromaks"
+# - when looking for older versions, check both current name and that name.
+
 # Dedalus 3 edits made by Alex Skeldon.
 ###########################################################################################
 """
