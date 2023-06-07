@@ -27,6 +27,8 @@ We use the vector potential, and enforce the Coulomb Gauge, div(A) = 0.
 File formerly called D3_SSX_A_2_spheromaks
 - when looking for older versions, check both current name and that name.
 
+# This week I am working on solving T/rho unphysicalities.
+Density is negative from very beginning - write out functions for initialization of fields, figure out 
 
 Dedalus 3 edits made by Alex Skeldon. Direct all queries to askeldo1@swarthmore.edu (prior to June 2024).
 """
@@ -39,7 +41,7 @@ import dedalus.public as d3
 from dedalus.extras import flow_tools
 
 
-from D3_two_spheromaks import spheromak_pair, parity
+from D3_LBVP_SSX import spheromak_pair, parity
 
 import logging
 logger = logging.getLogger(__name__)
@@ -58,19 +60,20 @@ length = 10
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
 mesh = [2,2]
-#mesh = [16,16]
+# mesh = [16,16]
+# mesh = None
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.01
 mu = 0.05 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
 eta = 0.001 # Determines Re_m ; 0.001 -> Re_m = 1000
-rho0 = 1 #rho0 is redefined later, and generally has a whole
+rhoIni = 1 #rho0 is redefined later, and generally has a whole
 gamma = 5./3.
 eta_sp = 2.7 * 10**(-4)
 eta_ch = 4.4 * 10**(-3)
 v0_ch = 2.9 * 10**(-2)
-chi = kappa/rho0
-nu = mu/rho0
+chi = kappa/rhoIni
+nu = mu/rhoIni
 #diffusivities for heat (kappa -> chi), momentum (viscosity) (mu -> nu), current (eta)
 # life time of currents regulated by resistivity
 # linearization time of temperature goes like e^-t/kappa
@@ -95,6 +98,8 @@ tau_A = dist.Field(name='tau_A')
 
 # Coulomb Gauge implies J = -Laplacian(A)
 # j = dist.VectorField(coords, name ='j', bases = (xbasis, ybasis, zbasis))
+# Do all of these need ".evaluate()" added to them? - clarify when it's needed and isn't from
+# B line in LBVP.
 j = -d3.lap(A)
 J2 = j@j
 rho = np.exp(lnrho)
@@ -126,7 +131,7 @@ SSX.add_equation("integ(phi) = 0")
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v)  - v@grad(T) + (gamma - 1)*eta*J2")
 
-solver = SSX.build_solver(d3.RK222) #switch to RK222? (formerly 443)
+solver = SSX.build_solver(d3.RK222) # (formerly 443; try both)
 
 logger.info("Solver built")
 
@@ -139,16 +144,16 @@ solver.stop_wall_time = np.inf #e.g. 60*60*3 would limit runtime to three hours
 solver.stop_iteration = np.inf
 
 x,y,z = dist.local_grids(xbasis,ybasis,zbasis)
-fullGrid = x*y*z
+rho0 = np.zeros_like(lnrho['g'])
 
 # Initial condition parameters
 R = r
 L = R
 lambda_rho = 0.4 # half-width of transition region for initial conditions
-lambda_rho1 = 0.1
+lambda_rho1 = 0.1 #Similar parameter, but used for r-direction transition
 rho_min = 0.011
 T0 = 0.1
-delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
+delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope plasma) has delta = 0.1.
 
 # Spheromak initial condition
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
@@ -158,7 +163,6 @@ for i in range(3):
 
 
 # Frame for meta params in D3 with RealFourier
-# (need to get multi-basis syntax for specifying coeff values in dir prods down first).
 
 A = parity(A,0)
 v = parity(v,1)
@@ -170,33 +174,33 @@ phi = parity(phi,1,scalar=True)
 #initial velocity
 max_vel = 0.1
 ##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
+#i.e. v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
-# Maybe write your versions of how you think these hardcodings should go,
-# then ask jeff to have a call just to specifically Discuss this issue
-#should always use local grid - never loop over things like this - talk to Jeff about in future call.
+# Maybe write a version of how you think these hardcodings should go?
+#should always use local grid - never loop over things like this, apparently
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
     for j in range(y.shape[1]):
        yVal = y[0,j,0]
        for k in range(z.shape[2]):
            zVal = z[0,0,k]
-           fullGrid[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
+           rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
 
-#ignoring this section for now
+#ignoring this section for now - only place lambda_rho is used
 ##########################################################################################################################################
 #--------------------------------------density in the z direction with cosine transisition ----------------------------------------------#
 ##########################################################################################################################################
 #           if((zVal <= 1 - lambda_rho or zVal >= 9 + lambda_rho)):
-#               fullGrid[i][j][k] = 1
+#               rho0[i][j][k] = 1
 #           elif((zVal >= 1 - lambda_rho and zVal <= 1 + lambda_rho)):
-#               fullGrid[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((1-zVal) * np.pi/(2*lambda_rho))
+#               rho0[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((1-zVal) * np.pi/(2*lambda_rho))
 #           elif(zVal <= 9 + lambda_rho and zVal >= 9 - lambda_rho):
-#               fullGrid[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((zVal - 9) * np.pi/(2*lambda_rho))
+#               rho0[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((zVal - 9) * np.pi/(2*lambda_rho))
 #           else:
-#               fullGrid[i][j][k] = rho_min
+#               rho0[i][j][k] = rho_min
 
 ##########################################################################################################################################
-#-------------------------------enforcing circular crosssection of density---------------------------------------------------------------#
+#-------------------------------enforcing circular cross-section of density---------------------------------------------------------------#
 ##########################################################################################################################################
 
 for i in range(x.shape[0]):
@@ -206,25 +210,26 @@ for i in range(x.shape[0]):
        for k in range(z.shape[2]):
             zVal = z[0,0,k]
             r = np.sqrt(xVal**2 + yVal**2)
-##fullGrid[i][j][k] = np.tanh(40*r+40)*(fullGrid[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(fullGrid[i][j][k]-rho_min)/2 + rho_min #tanh transistion
+##rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transistion
 
 ##########################################################################################################################################
 #-----------------------------------------------sinusodial transition-----------------------------------------------------------------------------#
 ##########################################################################################################################################
+
+#It looks like the idea here was to copy the sinusoidal transition for density in the lengthwise and apply it to the radial direction.
+# Meanwhile, the transition in the z-direction was changed to the tanh further above?
             if(r <= 1 - lambda_rho1):
-               fullGrid[i][j][k] = fullGrid[i][j][k]
+               rho0[i][j][k] = rho0[i][j][k]
             elif((r >= 1 - lambda_rho1 and r <= 1 + lambda_rho1)):
-               fullGrid[i][j][k] = (fullGrid[i][j][k] + rho_min)/2 + (fullGrid[i][j][k] - rho_min)/2*np.sin((1-r) * np.pi/(2*lambda_rho1))
+               rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)/2*np.sin((1-r) * np.pi/(2*lambda_rho1))
             else:
-               fullGrid[i][j][k] = rho_min
+               rho0[i][j][k] = rho_min
 
 #figure out what the whole deal with rho0 is - also def as const at start
 #probably better way to rewrite this without the rho0 field
-rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
-rho0['g'] = fullGrid
 
-lnrho['g'] = np.log(rho0['g'])
-T['g'] = T0 * rho0['g']**(gamma - 1)
+lnrho['g'] = np.log(rho0)
+T['g'] = T0 * rho0**(gamma - 1)
 
 ##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0['g']))*(1 - np.exp((-v0_ch)/(3*rho0['g']*np.sqrt(gamma*T['g']))))
 
@@ -255,8 +260,10 @@ if dist.comm.rank == 0:
     #         else:
     #             os.mkdir(name)
 
-# Will revisit tomorrow
-checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, wall_dt=wall_dt_checkpoints, mode = fh_mode)
+# wall_dt=wall_dt_checkpoints
+# current version saves at every timestep
+# Only look at data from checkpoints - 
+checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, iter=1, mode = fh_mode) #other things big, this generally small (when not doing every iter)
 checkpoint.add_tasks(solver.state)
 
 
@@ -266,6 +273,9 @@ field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
 field_writes.add_task(d3.curl(B), name='j')
 #Supposed to enforce positive rho, but still seeing negative numbers in h5 reader
+
+# These two should be only issues
+# Look in field_writes to see if T has negative values in it too
 field_writes.add_task(np.exp(lnrho), name = 'rho')
 field_writes.add_task(T)
 # field_writes.add_task(eta1)
@@ -280,13 +290,6 @@ field_writes.add_task(T)
 # parameter_writes.add_task(gamma)
 
 #is there a way to make it so that sim_dt = solver.stop_sim_time/max_writes?
-load_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'load_data_two'), max_writes = 50, sim_dt = 4*output_cadence, mode = fh_mode)
-load_writes.add_task(v)
-load_writes.add_task(A)
-load_writes.add_task(lnrho)
-load_writes.add_task(T)
-load_writes.add_task(phi)
-load_writes.add_task(tau_A)
 
 # Helicity
 helicity_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=500, sim_dt = 2*output_cadence, mode=fh_mode)
@@ -301,6 +304,8 @@ flow.add_property(np.sqrt(v@v), name = 'flow_speed')
 flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
 flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
 flow.add_property(T, name = 'temp')
+flow.add_property(lnrho, name = 'log density')
+flow.add_property(np.exp(lnrho), name = 'density')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
@@ -337,7 +342,7 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'))
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'))
             logger.info(logger_string)
 
             np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])

@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 ###########################################################################################
 """
     This scripts contains the two initializations of the spheromaks.
-    spheromak_pair is the main and the script that initializes the two spheromaks. 
+    spheromak_pair is the main function, which initializes the two spheromaks. 
     getS1 and getS are the two shape functions for the spheromaks.
 """
 ###########################################################################################
@@ -141,7 +141,6 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     J0 - Current density
     J1 - Bessel of order 1
     
-    
     Solve:
     Laplacian(A) = - J0
 
@@ -180,7 +179,6 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # S1 - centered at 10 (The other end of the domain)
     J_r = S*lam*(-np.pi*j1(kr*r)*np.cos(z*kz)) + S1*lam*(np.pi*j1(kr*r)*np.cos((-z1)*kz))
     J_t = S*lam*(lam*j1(kr*r)*np.sin(z*kz)) - S1*lam*(-lam*j1(kr*r)*np.sin((-z1)*kz))
-
 
     """ Initializing the J fields for the dedalus problem. """
     # J0 is set to B0, which should be 1.

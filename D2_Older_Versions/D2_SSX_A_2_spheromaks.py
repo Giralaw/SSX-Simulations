@@ -226,10 +226,11 @@ for i in range(x.shape[0]):
 ##########################################################################################################################################
 #-----------------------------------------------sinusodial transistion-----------------------------------------------------------------------------#
 ##########################################################################################################################################
+
             if(r <= 1 - lambda_rho1):
                fullGrid[i][j][k] = fullGrid[i][j][k]
             elif((r >= 1 - lambda_rho1 and r <= 1 + lambda_rho1)):
-               fullGrid[i][j][k] = (fullGrid[i][j][k] + rho_min)/2 + (fullGrid[i][j][k] - rho_min)/2*np.sin((1-r) * np.pi/(2*lambda_rho1))
+               fullGrid[i][j][k] = (fullGrid[i][j][k] + rho_min)/2 + (fullGrid[i][j][k] - rho_min)/2*np.sin((1-z) * np.pi/(2*lambda_rho1))
             else:
                fullGrid[i][j][k] = rho_min
 
