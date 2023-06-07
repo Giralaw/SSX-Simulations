@@ -2,6 +2,7 @@
 SSX simulation work on Dedalus from Summer 2023.
 
 
+
 Also refer to Gary's files from Summer 2021 (https://github.com/garyang3/SSX-MHD-Gary)
 
 
