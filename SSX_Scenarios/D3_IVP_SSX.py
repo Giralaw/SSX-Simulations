@@ -267,8 +267,8 @@ checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoint
 checkpoint.add_tasks(solver.state)
 
 
-field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 500, sim_dt = output_cadence, mode = fh_mode)
-# trying to just put j for third one yields issues - because j not variable in problem?
+field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 10, iter = 1, mode = fh_mode)
+# trying to just put j for third one yields issues - because j not variable in problem? # sim_dt = output_cadence
 field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
 field_writes.add_task(d3.curl(B), name='j')
@@ -288,7 +288,6 @@ field_writes.add_task(T)
 # parameter_writes.add_task(nu)
 # parameter_writes.add_task(chi)
 # parameter_writes.add_task(gamma)
-
 #is there a way to make it so that sim_dt = solver.stop_sim_time/max_writes?
 
 # Helicity
@@ -344,11 +343,6 @@ try:
             Al_v_avg = flow.grid_average('Al_v')
             logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'))
             logger.info(logger_string)
-
-            np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
-            np.clip(T['g'], 0.001, 1000, out=T['g'])
-            np.clip(v['g'], -100, 100, out=v['g'])
-            ##np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
 
             if not np.isfinite(Re_k_avg):
                 good_solution = False
