@@ -50,8 +50,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 16 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-ny = 16
+nx = 32 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+ny = 32
 nz = 160 # try power of two for nz? e.g. 512?
 r = 1
 length = 10
@@ -124,7 +124,7 @@ SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cros
 # MHD equations: A
 SSX.add_equation("dt(A) + grad(phi) = - eta*j + cross(v,B)")
 
-#these two should replace the commented equations below?
+#gauge constraints
 SSX.add_equation("div(A) + tau_A = 0")
 SSX.add_equation("integ(phi) = 0")
 
@@ -149,7 +149,7 @@ rho0 = np.zeros_like(lnrho['g'])
 # Initial condition parameters
 R = r
 L = R
-lambda_rho = 0.4 # half-width of transition region for initial conditions
+lambda_rho = 0.4 # half-width of z transition region for initial conditions
 lambda_rho1 = 0.1 #Similar parameter, but used for r-direction transition
 rho_min = 0.011
 T0 = 0.1
@@ -163,12 +163,14 @@ for i in range(3):
 
 
 # Frame for meta params in D3 with RealFourier
+# What is even our theoretical basis for these parities?
+# I don't see a particular reason they should be even or odd in each dimension
 
-A = parity(A,0)
-v = parity(v,1)
-T = parity(T,0,scalar=True)
-lnrho = parity(lnrho,0,scalar=True)
-phi = parity(phi,1,scalar=True)
+# A = parity(A,0)
+# v = parity(v,1)
+# T = parity(T,0,scalar=True)
+# lnrho = parity(lnrho,0,scalar=True)
+# phi = parity(phi,1,scalar=True)
 
 
 #initial velocity
@@ -181,23 +183,23 @@ max_vel = 0.1
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
     for j in range(y.shape[1]):
-       yVal = y[0,j,0]
-       for k in range(z.shape[2]):
-           zVal = z[0,0,k]
-           rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
+        yVal = y[0,j,0]
+        for k in range(z.shape[2]):
+            zVal = z[0,0,k]
+            rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
 
 #ignoring this section for now - only place lambda_rho is used
 ##########################################################################################################################################
-#--------------------------------------density in the z direction with cosine transisition ----------------------------------------------#
+#--------------------------------------density in the z direction with cosine transition ----------------------------------------------#
 ##########################################################################################################################################
-#           if((zVal <= 1 - lambda_rho or zVal >= 9 + lambda_rho)):
-#               rho0[i][j][k] = 1
-#           elif((zVal >= 1 - lambda_rho and zVal <= 1 + lambda_rho)):
-#               rho0[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((1-zVal) * np.pi/(2*lambda_rho))
-#           elif(zVal <= 9 + lambda_rho and zVal >= 9 - lambda_rho):
-#               rho0[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((zVal - 9) * np.pi/(2*lambda_rho))
-#           else:
-#               rho0[i][j][k] = rho_min
+            # if ((zVal <= 1 - lambda_rho or zVal >= 9 + lambda_rho)):
+            #   rho0[i][j][k] = 1
+            # elif ((zVal >= 1 - lambda_rho and zVal <= 1 + lambda_rho)):
+            #   rho0[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((1-zVal) * np.pi/(2*lambda_rho))
+            # elif (zVal <= 9 + lambda_rho and zVal >= 9 - lambda_rho):
+            #   rho0[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((zVal - 9) * np.pi/(2*lambda_rho))
+            # else:
+            #   rho0[i][j][k] = rho_min
 
 ##########################################################################################################################################
 #-------------------------------enforcing circular cross-section of density---------------------------------------------------------------#
@@ -206,10 +208,10 @@ for i in range(x.shape[0]):
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
     for j in range(y.shape[1]):
-       yVal = y[0,j,0]
-       for k in range(z.shape[2]):
+        yVal = y[0,j,0]
+        for k in range(z.shape[2]):
             zVal = z[0,0,k]
-            r = np.sqrt(xVal**2 + yVal**2)
+            rad = np.sqrt(xVal**2 + yVal**2)
 ##rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transistion
 
 ##########################################################################################################################################
@@ -218,18 +220,19 @@ for i in range(x.shape[0]):
 
 #It looks like the idea here was to copy the sinusoidal transition for density in the lengthwise and apply it to the radial direction.
 # Meanwhile, the transition in the z-direction was changed to the tanh further above?
-            if(r <= 1 - lambda_rho1):
-               rho0[i][j][k] = rho0[i][j][k]
-            elif((r >= 1 - lambda_rho1 and r <= 1 + lambda_rho1)):
-               rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)/2*np.sin((1-r) * np.pi/(2*lambda_rho1))
+            if(rad <= 1 - lambda_rho1):
+                rho0[i][j][k] = rho0[i][j][k]
+            elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)): # sine arg goes from pi/2 to -pi/2; so this should just generate a curve from rho0 to rhomi_min
+                rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)*np.sin((1-rad) * np.pi/(2*lambda_rho1))/2
             else:
-               rho0[i][j][k] = rho_min
+                rho0[i][j][k] = rho_min
 
 #figure out what the whole deal with rho0 is - also def as const at start
 #probably better way to rewrite this without the rho0 field
-
+rhoTest = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
+rhoTest['g'] = rho0
 lnrho['g'] = np.log(rho0)
-T['g'] = T0 * rho0**(gamma - 1)
+T['g'] = T0 * np.exp(lnrho['g'])**(gamma - 1)
 
 ##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0['g']))*(1 - np.exp((-v0_ch)/(3*rho0['g']*np.sqrt(gamma*T['g']))))
 
@@ -263,11 +266,11 @@ if dist.comm.rank == 0:
 # wall_dt=wall_dt_checkpoints
 # current version saves at every timestep
 # Only look at data from checkpoints - 
-checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, iter=1, mode = fh_mode) #other things big, this generally small (when not doing every iter)
+checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, iter=10, mode = fh_mode) #other things big, this generally small (when not doing every iter)
 checkpoint.add_tasks(solver.state)
 
 
-field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 10, iter = 1, mode = fh_mode)
+field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 10, iter = 10, mode = fh_mode)
 # trying to just put j for third one yields issues - because j not variable in problem? # sim_dt = output_cadence
 field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
@@ -288,7 +291,6 @@ field_writes.add_task(T)
 # parameter_writes.add_task(nu)
 # parameter_writes.add_task(chi)
 # parameter_writes.add_task(gamma)
-#is there a way to make it so that sim_dt = solver.stop_sim_time/max_writes?
 
 # Helicity
 helicity_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=500, sim_dt = 2*output_cadence, mode=fh_mode)
@@ -305,10 +307,11 @@ flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
 flow.add_property(T, name = 'temp')
 flow.add_property(lnrho, name = 'log density')
 flow.add_property(np.exp(lnrho), name = 'density')
+flow.add_property(rhoTest, name = 'test rho')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
-CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 1, safety = CFL_safety,
+CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 1, safety = CFL_safety, #cadence 10 or 1, reasons for either (higher dt resolution at merging point - check every 1)
                      max_change = 1.5, min_change = 0.005, max_dt = output_cadence, threshold = 0.05)
 CFL.add_velocity(v)
 CFL.add_velocity(Va)
@@ -328,11 +331,11 @@ try:
         solver.step(dt)
 
         # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
-        A = parity(A,0)
-        v = parity(v,1)
-        T = parity(T,0,scalar=True)
-        lnrho = parity(lnrho,0,scalar=True)
-        phi = parity(phi,1,scalar=True)
+        # A = parity(A,0)
+        # v = parity(v,1)
+        # T = parity(T,0,scalar=True)
+        # lnrho = parity(lnrho,0,scalar=True)
+        # phi = parity(phi,1,scalar=True)
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
@@ -341,7 +344,7 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'))
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}, min test rho = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'),flow.min('Al_v'), flow.min('test rho'))
             logger.info(logger_string)
 
             if not np.isfinite(Re_k_avg):

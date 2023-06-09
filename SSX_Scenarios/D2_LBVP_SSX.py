@@ -1,22 +1,24 @@
-import dedalus.public as d3
+import dedalus.public as de
 import numpy as np
 from scipy.special import j0, j1, jn_zeros
 import matplotlib.pyplot as plt
+import os
+import h5py
+from mpi4py import MPI
+from matplotlib.colors import LogNorm
 
 #See "Turbulence analysis of an experimental flux-rope plasma", D A Schaffner et al, 2014.
-
-# File formerly called "D3_two_spheromaks"
-# - when looking for older versions, check both current name and that name.
-
-# Dedalus 3 edits made by Alex Skeldon.
 ###########################################################################################
 """
-    This scripts contains the two initializations of the spheromaks.
-    spheromak_pair is the main function, which initializes the two spheromaks. 
-    getS1 and getS are the two shape functions for the spheromaks.
+    This scripts contains the two initializations of the spheromaks. spheromak_A is the main 
+    and the script that initializes the two spheromaks. 
+        There is spheromak_B which appears to be a 1 spheromak initialization.
+        getS1 and getS are the two shape functions for the spheromaks.
 """
-###########################################################################################
 
+# A current version of the D2 script for spheromak merging kept and edited for comparison
+# by Alex Skeldon.
+###########################################################################################
 #Shape function
 def getS1(r, z, L, R, zCenter):
     #############################################################################################
@@ -78,8 +80,6 @@ def getS1(r, z, L, R, zCenter):
     #for i in range (180):
     #    plot_2d(x, y, S[:, :, i], i)
     return S
-
-# Leaving alone for now
 def plot_2d(x, y, z, i):
     plt.imshow(z, extent=(np.amin(x), np.amax(x), np.amin(y), np.amax(y)), cmap=plt.cm.hot)
     plt.colorbar()
@@ -134,12 +134,12 @@ def getS(r, z, L, R, zCenter):
     S = r1 * z1
     return S
 
-# main function which calls getS and GetS1
-def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R = 1, L = 1):
+def spheromak_pair(domain, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """
     This function returns the intial 2X-spheromak vector potential components (x, y, z).
     J0 - Current density
     J1 - Bessel of order 1
+    
     
     Solve:
     Laplacian(A) = - J0
@@ -148,91 +148,95 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # B0 should always be 1, but we are leaving it as a parameter for safe keeping.
     """
 
-    # data_dir = "scratch_init"
-
     j1_zero1 = jn_zeros(1,1)[0]
     kr = j1_zero1/R
     kz = np.pi/L
 
-    #Force-free configuration: curl(B) = J = lam*B
     lam = np.sqrt(kr**2 + kz**2)
     J0 = B0 # This should be 1.
-
-
-    # if not a problem variable, is it correct to express our (fixed) J as a vectorfield like normal?
-    J = dist.VectorField(coords, name='J', bases=(xbasis, ybasis, zbasis))
-    xx, yy, zz = dist.local_grids(xbasis, ybasis, zbasis)
-
-    # Setting cylindrical coordinates
+    #####################################################################
+    """ Setting up the problem in dedalus. """
+    #####################################################################
+    #####################################################################
+    """ Setting up the domain """
+    #####################################################################
+    problem = de.LBVP(domain, variables = ['Ax', 'Ay', 'Az'])
+    #####################################################################
+    """ Meta Parameters """
+    #####################################################################
+    problem.meta['Ax']['y', 'z']['parity'] =  -1
+    problem.meta['Ax']['x']['parity'] = 1
+    problem.meta['Ay']['x', 'z']['parity'] = -1
+    problem.meta['Ay']['y']['parity'] = 1
+    problem.meta['Az']['x', 'y']['parity'] = -1
+    problem.meta['Az']['z']['parity'] = 1
+    #####################################################################
+    """ Creating fields/variables """
+    # Current density components
+    #####################################################################
+    J0_x = domain.new_field()
+    J0_y = domain.new_field()
+    J0_z = domain.new_field()
+    xx, yy, zz = domain.grids()
+    #####################################################################
+    """ Setting cylindrical coordinates """
+    #####################################################################
     r = np.sqrt((xx - center[0])**2 + (yy - center[1])**2)
     theta = np.arctan2(yy,xx)
     z = zz - center[2]
     z1 = zz - 10
-
-    # Creating the two shape functions
+    #####################################################################
+    """ Creating the two shape functions """
+    #####################################################################
     S = getS(r, z, L, R, center[2])
     S1 = getS1(r,z1, L, R, 10)
-
-    """ Current density; cylindrical components Eq. (9) """
-    # Note they are sums of two separate shape functions. S and S1.
+    #####################################################################
+    """ Current density; cylindrical componetns Eq. (9) """
+    # Note they are sums of two seperate shape functions. S and S1.
     # S - centered at 0
     # S1 - centered at 10 (The other end of the domain)
+    #####################################################################
     J_r = S*lam*(-np.pi*j1(kr*r)*np.cos(z*kz)) + S1*lam*(np.pi*j1(kr*r)*np.cos((-z1)*kz))
     J_t = S*lam*(lam*j1(kr*r)*np.sin(z*kz)) - S1*lam*(-lam*j1(kr*r)*np.sin((-z1)*kz))
-
-    """ Initializing the J fields for the dedalus problem. """
+    #####################################################################
+    """ Initializing the domain fields/grids for the dedalus problem. """
     # J0 is set to B0, which should be 1.
-    
-    J['g'][0] = J0*(J_r*np.cos(theta) - J_t*np.sin(theta))
-    J['g'][1] = J0*(J_r*np.sin(theta) + J_t*np.cos(theta))
-    J['g'][2] = J0*S*lam*(kr*j0(kr*r)*np.sin(z*kz)) + J0*S1*lam*(kr*j0(kr*r)*np.sin((-z1)*kz))
+    #####################################################################
+    J0_x['g'] = J0*(J_r*np.cos(theta) - J_t*np.sin(theta))
+    J0_y['g'] = J0*(J_r*np.sin(theta) + J_t*np.cos(theta))
+    J0_z['g'] = J0*S*lam*(kr*j0(kr*r)*np.sin(z*kz)) + J0*S1*lam*(kr*j0(kr*r)*np.sin((-z1)*kz))
 
 
-    A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
+    J0_x.meta['y', 'z']['parity'] = -1
+    J0_x.meta['x']['parity'] = 1
+    J0_y.meta['x', 'z']['parity'] = -1
+    J0_y.meta['y']['parity'] = 1
+    J0_z.meta['x', 'y']['parity'] = -1
+    J0_z.meta['z']['parity'] = 1
 
-    #Meta/Parity specifiers
-    # e.g. A_i is even in i-basis, odd in other two (see func further below)
-    A = parity(A,0)
-    J = parity(J,0)
-
-    # phi field not necessary if integ(A) is correct gauge
-    # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis));
-    tau_phi = dist.VectorField(coords, name='tau_phi')
-    B = d3.curl(A).evaluate()
-
-    #h5py documentation - write B field into it
-
-    problem = d3.LBVP([A, tau_phi],namespace=locals())
-
-    # Force Free Equations/Spheromak """
-
-    # lap(A) = -J
-    # Need to come up with a good way to check if what this gives is correct. Add a task to this to make an h5 file that saves A or B.
-    problem.add_equation("lap(A) + tau_phi =  -J") # + grad(phi) term for Div(A) case
-    problem.add_equation("integ(A) = 0") #check that this gives divA = 0
-    # problem.add_equation("div(A) = 0")
+    problem.parameters['J0_x'] = J0_x
+    problem.parameters['J0_y'] = J0_y
+    problem.parameters['J0_z'] = J0_z
 
 
-    #Building the solver """
+    #####################################################################
+    """ Force Free Equations/Spheromak """
+    #####################################################################
+    # x-component
+    problem.add_equation("dx(dx(Ax)) + dy(dy(Ax)) + dz(dz(Ax)) =  -J0_x", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
+    problem.add_equation("Ax = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
+    # y-component
+    problem.add_equation("dx(dx(Ay)) + dy(dy(Ay)) + dz(dz(Ay)) =  -J0_y", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
+    problem.add_equation("Ay = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
+    # z-component
+    problem.add_equation("dx(dx(Az)) + dy(dy(Az)) + dz(dz(Az)) =  -J0_z", condition = "(nx != 0) or (ny != 0) or (nz != 0)")
+    problem.add_equation("Az = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
+
+    #####################################################################
+    """ Building the solver """
+    # That is, setting things into play.
+    #####################################################################
     solver = problem.build_solver()
     solver.solve()
-
-    #analysis
-    # Not sure how to add analysis tasks for a non-IVP. Just want to be able to see B field itself.
     
-    return A
-
-def parity(initfield, par, scalar=False):
-#enforce meta parity parameters on fields - 0 is even/cosine, 1 is odd/sine
-# Works for our 2:1 parity cycles and scalar fields- not general for any combination.
-    if scalar == True:
-        initfield['c'][1-par::2,1-par::2,1-par::2] = 0
-    else:
-        initfield['c'][0, 1-par::2, par::2, par::2] = 0
-        initfield['c'][1, par::2, 1-par::2, par::2] = 0
-        initfield['c'][2, par::2, par::2, 1-par::2] = 0
-
-    return initfield
-
-# There used to be an incomplete "spheromak" function here. Refer back to the stored D2
-# Version at some point and see what the point of that func was/if it's still relevant.
+    return solver.state['Ax']['g'], solver.state['Ay']['g'], solver.state['Az']['g']
