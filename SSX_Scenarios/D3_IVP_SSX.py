@@ -94,6 +94,7 @@ lnrho = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
 T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
 phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
 tau_A = dist.Field(name='tau_A')
+# eta1 = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
 # ex, ey, ez = coords.unit_vector_fields(dist)
 
 # Coulomb Gauge implies J = -Laplacian(A)
@@ -104,6 +105,9 @@ j = -d3.lap(A)
 J2 = j@j
 rho = np.exp(lnrho)
 B = d3.curl(A)
+#spitzer and chodra resistivity combination
+#eta1 = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))
+eta1 = 0.001
 
 # CFL substitutions
 Va = B/np.sqrt(rho)
@@ -112,8 +116,8 @@ Cs = np.sqrt(gamma*T)
 #Problem
 SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
 
-#resistivity
-#SSX.add_equation("eta1 = eta_sp/(sqrt(T)**3) + (eta_ch/sqrt(rho))*(1 - exp((-v0_ch*sqrt(J2))/(3*rho*sqrt(gamma*T))))")
+#variable resistivity
+# SSX.add_equation("eta1 = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))")
 
 # Continuity
 SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
@@ -122,14 +126,14 @@ SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
 SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
-SSX.add_equation("dt(A) + grad(phi) = - eta*j + cross(v,B)")
+SSX.add_equation("dt(A) + grad(phi) = - eta1*j + cross(v,B)")
 
 #gauge constraints
 SSX.add_equation("div(A) + tau_A = 0")
 SSX.add_equation("integ(phi) = 0")
 
 # Energy
-SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v)  - v@grad(T) + (gamma - 1)*eta*J2")
+SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta1*J2")
 
 solver = SSX.build_solver(d3.RK222) # (formerly 443; try both)
 
@@ -173,10 +177,11 @@ for i in range(3):
 # phi = parity(phi,1,scalar=True)
 
 
-#initial velocity
+#initial velocity - use z, or zVal??
 max_vel = 0.1
 ##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
-#i.e. v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
+# v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
+
 
 # Maybe write a version of how you think these hardcodings should go?
 #should always use local grid - never loop over things like this, apparently
@@ -186,6 +191,7 @@ for i in range(x.shape[0]):
         yVal = y[0,j,0]
         for k in range(z.shape[2]):
             zVal = z[0,0,k]
+            v['g'][2] = -np.tanh(6*zVal - 6)*max_vel/2 + -np.tanh(6*zVal - 54)*max_vel/2
             rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
 
 #ignoring this section for now - only place lambda_rho is used
@@ -229,8 +235,8 @@ for i in range(x.shape[0]):
 
 #figure out what the whole deal with rho0 is - also def as const at start
 #probably better way to rewrite this without the rho0 field
-rhoTest = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
-rhoTest['g'] = rho0
+# rhoTest = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
+# rhoTest['g'] = rho0
 lnrho['g'] = np.log(rho0)
 T['g'] = T0 * np.exp(lnrho['g'])**(gamma - 1)
 
@@ -307,7 +313,7 @@ flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
 flow.add_property(T, name = 'temp')
 flow.add_property(lnrho, name = 'log density')
 flow.add_property(np.exp(lnrho), name = 'density')
-flow.add_property(rhoTest, name = 'test rho')
+# flow.add_property(rhoTest, name = 'test rho')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
@@ -344,7 +350,7 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}, min test rho = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'),flow.min('Al_v'), flow.min('test rho'))
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'),flow.min('Al_v')) #min test rho = {:.2g}, flow.min('test rho')
             logger.info(logger_string)
 
             if not np.isfinite(Re_k_avg):
