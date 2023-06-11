@@ -50,9 +50,9 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 32 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-ny = 32
-nz = 160 # try power of two for nz? e.g. 512?
+nx = 64 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320?
+ny = 64
+nz = 320 # try power of two for nz? e.g. 512?
 r = 1
 length = 10
 
@@ -169,12 +169,13 @@ for i in range(3):
 # Frame for meta params in D3 with RealFourier
 # What is even our theoretical basis for these parities?
 # I don't see a particular reason they should be even or odd in each dimension
-
-# A = parity(A,0)
-# v = parity(v,1)
-# T = parity(T,0,scalar=True)
-# lnrho = parity(lnrho,0,scalar=True)
-# phi = parity(phi,1,scalar=True)
+# Apparently the parity can force zero values at boundaries, as a sort of faux-bc?
+# That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
+A = parity(A,0)
+v = parity(v,1)
+T = parity(T,0,scalar=True)
+lnrho = parity(lnrho,0,scalar=True)
+phi = parity(phi,1,scalar=True)
 
 
 #initial velocity - use z, or zVal??
@@ -272,11 +273,11 @@ if dist.comm.rank == 0:
 # wall_dt=wall_dt_checkpoints
 # current version saves at every timestep
 # Only look at data from checkpoints - 
-checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, iter=10, mode = fh_mode) #other things big, this generally small (when not doing every iter)
+checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, iter=1, mode = fh_mode) #other things big, this generally small (when not doing every iter)
 checkpoint.add_tasks(solver.state)
 
 
-field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 10, iter = 10, mode = fh_mode)
+field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 10, iter = 1, mode = fh_mode)
 # trying to just put j for third one yields issues - because j not variable in problem? # sim_dt = output_cadence
 field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
@@ -337,11 +338,11 @@ try:
         solver.step(dt)
 
         # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
-        # A = parity(A,0)
-        # v = parity(v,1)
-        # T = parity(T,0,scalar=True)
-        # lnrho = parity(lnrho,0,scalar=True)
-        # phi = parity(phi,1,scalar=True)
+        A = parity(A,0)
+        v = parity(v,1)
+        T = parity(T,0,scalar=True)
+        lnrho = parity(lnrho,0,scalar=True)
+        phi = parity(phi,1,scalar=True)
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
