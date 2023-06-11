@@ -33,7 +33,6 @@ Density is negative from very beginning - write out functions for initialization
 Dedalus 3 edits made by Alex Skeldon. Direct all queries to askeldo1@swarthmore.edu (prior to June 2024).
 """
 
-import time
 import numpy as np
 import os
 import sys
@@ -99,9 +98,6 @@ tau_A = dist.Field(name='tau_A')
 ex, ey, ez = coords.unit_vector_fields(dist)
 
 # Coulomb Gauge implies J = -Laplacian(A)
-# j = dist.VectorField(coords, name ='j', bases = (xbasis, ybasis, zbasis))
-# Do all of these need ".evaluate()" added to them? - clarify when it's needed and isn't from
-# B line in LBVP.
 j = -d3.lap(A)
 J2 = j@j
 rho = np.exp(lnrho)
@@ -182,11 +178,10 @@ phi = parity(phi,1,scalar=True)
 
 #initial velocity - use z, or zVal??
 max_vel = 0.1
-##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
+##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # was commented previously - 0 vel IC?
 v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
 
-# Maybe write a version of how you think these hardcodings should go?
 #should always use local grid - never loop over things like this, apparently
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
@@ -196,19 +191,6 @@ for i in range(x.shape[0]):
             zVal = z[0,0,k]
             v['g'][2] = -np.tanh(6*zVal - 6)*max_vel/2 + -np.tanh(6*zVal - 54)*max_vel/2
             rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
-
-#ignoring this section for now - only place lambda_rho is used
-##########################################################################################################################################
-#--------------------------------------density in the z direction with cosine transition ----------------------------------------------#
-##########################################################################################################################################
-            # if ((zVal <= 1 - lambda_rho or zVal >= 9 + lambda_rho)):
-            #   rho0[i][j][k] = 1
-            # elif ((zVal >= 1 - lambda_rho and zVal <= 1 + lambda_rho)):
-            #   rho0[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((1-zVal) * np.pi/(2*lambda_rho))
-            # elif (zVal <= 9 + lambda_rho and zVal >= 9 - lambda_rho):
-            #   rho0[i][j][k] = (1 + rho_min)/2 + (1 - rho_min)/2*np.sin((zVal - 9) * np.pi/(2*lambda_rho))
-            # else:
-            #   rho0[i][j][k] = rho_min
 
 ##########################################################################################################################################
 #-------------------------------enforcing circular cross-section of density---------------------------------------------------------------#
@@ -236,17 +218,12 @@ for i in range(x.shape[0]):
             else:
                 rho0[i][j][k] = rho_min
 
-#figure out what the whole deal with rho0 is - also def as const at start
-#probably better way to rewrite this without the rho0 field
-# rhoTest = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
-# rhoTest['g'] = rho0
 lnrho['g'] = np.log(rho0)
 T['g'] = T0 * np.exp(lnrho['g'])**(gamma - 1)
 
 ##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0['g']))*(1 - np.exp((-v0_ch)/(3*rho0['g']*np.sqrt(gamma*T['g']))))
 
 # analysis output
-##data_dir = './'+sys.argv[0].split('.py')[0]
 wall_dt_checkpoints = 2
 output_cadence = 0.1 # This is in simulation time units
 
@@ -254,8 +231,8 @@ fh_mode = 'overwrite'
 
 # load state for restart - does it matter where to put it?
 # also, does the virtual file work for restarting
-# solver.load_state("scratch/checkpoints2/checkpoints2_s1.h5")
-# solver.load_state("scratch/load_data_two/load_data_two_s1/load_data_two_s1_p1.h5")
+#It really is that easy.
+solver.load_state("scratch/checkpoints2/checkpoints2_s1.h5")
 
 #handle data output dirs
 # I'm realizing the else statement doesn't necessarily work so well for the Bridges job submitting scheme...
@@ -273,7 +250,7 @@ if dist.comm.rank == 0:
     #             os.mkdir(name)
 
 # wall_dt=wall_dt_checkpoints
-# current version saves at every timestep
+
 # Only look at data from checkpoints - 
 checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=20, iter = 10, mode = fh_mode) #other things big, this generally small (when not doing every iter) # but iter = 1 is the diagnostic term # sim_dt = 0.5*output_cadence
 checkpoint.add_tasks(solver.state)
@@ -291,15 +268,6 @@ field_writes.add_task(d3.curl(B), name='j')
 field_writes.add_task(np.exp(lnrho), name = 'rho')
 field_writes.add_task(T)
 # field_writes.add_task(eta1)
-
-# complaint about floats not having a dtype - can comment this out, but is probably nice
-# to have parameters in h5 file with rest of scenario
-# parameter_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'parameters_two'), max_writes = 1, sim_dt = output_cadence, mode = fh_mode)
-# parameter_writes.add_task(mu)
-# parameter_writes.add_task(eta)
-# parameter_writes.add_task(nu)
-# parameter_writes.add_task(chi)
-# parameter_writes.add_task(gamma)
 
 # Helicity
 helicity_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=20, sim_dt = output_cadence, mode=fh_mode)
@@ -329,9 +297,6 @@ CFL.add_velocity(Cs_vec)
 
 #not sure how to turn Cs into a vector; or if that's still something that we ought to be doing
 # Maybe this is what was previously preventing negative temperature?
-# add_freq is my best guess for scalar version right now
-# CFL.add_frequency(Cs) # this didn't work for 32x32 at least - temp still went negative
-# CFL.add_velocity(np.array([Cs, Cs, Cs]))
 
 good_solution = True
 # Main loop
