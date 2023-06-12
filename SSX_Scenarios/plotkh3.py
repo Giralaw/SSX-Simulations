@@ -14,10 +14,10 @@ if(len(sys.argv) != 2):
     sys.exit(0)
 else:
     it = int(sys.argv[1])
-file = 'checkpoints2'
+file = 'fields_two'
 # with h5py.File("2Sph_Run4_TandRhobad/scratch/fields_two/fields_two_s1.h5", mode='r') as file:   
-with h5py.File('DataFolders/128RunTry/'+file+'/'+file+'_s2.h5', mode='r') as file:
-    S = file['tasks']['lnrho']
+with h5py.File('scratch/'+file+'/'+file+'_s1.h5', mode='r') as file:
+    S = file['tasks']['rho']
     #t = S.dims[0]['sim_time']
     #t = file['scales']['sim_time']
 
@@ -27,9 +27,9 @@ with h5py.File('DataFolders/128RunTry/'+file+'/'+file+'_s2.h5', mode='r') as fil
     y = S.dims[2][0]
     z = S.dims[3][0]
 
-    nx = 128
-    ny = 128
-    nz = 640
+    nx = 32
+    ny = 32
+    nz = 160
 
     X, Y, Z = np.mgrid[0:nx, 0:ny, 0:nz]
 

@@ -65,7 +65,7 @@ mesh = [2,2]
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.01
-mu = 0.005 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
+mu = 0.05 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
 eta = 0.001 # Determines Re_m ; 0.001 -> Re_m = 1000
 rhoIni = 1 #rho0 is redefined later, and generally has a whole
 gamma = 5./3.
@@ -77,14 +77,15 @@ nu = mu/rhoIni
 #diffusivities for heat (kappa -> chi), momentum (viscosity) (mu -> nu), current (eta)
 # life time of currents regulated by resistivity
 # linearization time of temperature goes like e^-t/kappa
+dealias=3/2
 
 #Coords, dist, bases
 coords = d3.CartesianCoordinates('x', 'y','z')
 dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
 
-xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
-ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
-zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length))
+xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r), dealias = dealias)
+ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r), dealias = dealias)
+zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length), dealias = dealias)
 
 # Fields
 t = dist.Field(name='t')
@@ -159,9 +160,9 @@ delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope 
 
 # Spheromak initial condition
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
-for i in range(3):
-    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
+# aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
+# for i in range(3):
+#     A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 
 
 # Frame for meta params in D3 with RealFourier
@@ -179,7 +180,7 @@ phi = parity(phi,1,scalar=True)
 #initial velocity - use z, or zVal??
 max_vel = 0.1
 ##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # was commented previously - 0 vel IC?
-v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
+# v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
 
 #should always use local grid - never loop over things like this, apparently
@@ -189,9 +190,9 @@ for i in range(x.shape[0]):
         yVal = y[0,j,0]
         for k in range(z.shape[2]):
             zVal = z[0,0,k]
-            v['g'][2] = -np.tanh(6*zVal - 6)*max_vel/2 + -np.tanh(6*zVal - 54)*max_vel/2
-            rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
-
+            # v['g'][2] = -np.tanh(6*zVal - 6)*max_vel/2 + -np.tanh(6*zVal - 54)*max_vel/2
+            rho0[i][j][k] = -np.tanh(2*zVal-6)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
+            # rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1
 ##########################################################################################################################################
 #-------------------------------enforcing circular cross-section of density---------------------------------------------------------------#
 ##########################################################################################################################################
@@ -202,6 +203,7 @@ for i in range(x.shape[0]):
         yVal = y[0,j,0]
         for k in range(z.shape[2]):
             zVal = z[0,0,k]
+            rho0[i][j][k] = 1
             rad = np.sqrt(xVal**2 + yVal**2)
 ##rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transistion
 
@@ -232,7 +234,7 @@ fh_mode = 'overwrite'
 # load state for restart - does it matter where to put it?
 # also, does the virtual file work for restarting
 #It really is that easy.
-solver.load_state("scratch/checkpoints2/checkpoints2_s1.h5")
+# solver.load_state("scratch/checkpoints2/checkpoints2_s1.h5")
 
 #handle data output dirs
 # I'm realizing the else statement doesn't necessarily work so well for the Bridges job submitting scheme...
@@ -256,7 +258,7 @@ checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoint
 checkpoint.add_tasks(solver.state)
 
 
-field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 20, sim_dt = output_cadence, mode = fh_mode)
+field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 20, iter = 10, mode = fh_mode)
 # trying to just put j for third one yields issues - because j not variable in problem? # sim_dt = output_cadence
 field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
