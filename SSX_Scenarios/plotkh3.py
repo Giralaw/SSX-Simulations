@@ -14,10 +14,10 @@ if(len(sys.argv) != 2):
     sys.exit(0)
 else:
     it = int(sys.argv[1])
-file = 'fields_two'
+file = 'load_data_two'
 # with h5py.File("2Sph_Run4_TandRhobad/scratch/fields_two/fields_two_s1.h5", mode='r') as file:   
-with h5py.File('scratch/'+file+'/'+file+'_s1.h5', mode='r') as file:
-    S = file['tasks']['rho']
+with h5py.File('DataFolders/D3_SSX_Run1/'+file+'/'+file+'_s1.h5', mode='r') as file:
+    S = file['tasks']['T']
     #t = S.dims[0]['sim_time']
     #t = file['scales']['sim_time']
 
@@ -27,13 +27,13 @@ with h5py.File('scratch/'+file+'/'+file+'_s1.h5', mode='r') as file:
     y = S.dims[2][0]
     z = S.dims[3][0]
 
-    nx = 32
-    ny = 32
-    nz = 160
+    nx = 64
+    ny = 64
+    nz = 320
 
     X, Y, Z = np.mgrid[0:nx, 0:ny, 0:nz]
 
-    fig = go.Figure(data=go.Isosurface(colorbar=dict(title='density'),
+    fig = go.Figure(data=go.Isosurface(colorbar=dict(title='Temp'),
                                        x=X.flatten(),
                                        y=Y.flatten(),
                                        z=Z.flatten(),
