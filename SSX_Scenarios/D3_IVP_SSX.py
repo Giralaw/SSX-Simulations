@@ -28,7 +28,6 @@ File formerly called D3_SSX_A_2_spheromaks
 - when looking for older versions, check both current name and that name.
 
 # This week I am working on solving T/rho unphysicalities.
-Density is negative from very beginning - write out functions for initialization of fields, figure out 
 
 Dedalus 3 edits made by Alex Skeldon. Direct all queries to askeldo1@swarthmore.edu (prior to June 2024).
 """
@@ -49,9 +48,9 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 32 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-ny = 32
-nz = 160 # try power of two for nz? e.g. 512?
+nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+#nx,ny,nz = 64,64,320
+#nx,ny,nz = 128,128,640
 r = 1
 length = 10
 
@@ -59,15 +58,17 @@ length = 10
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
 # mesh = [32,32]
-mesh = [2,2]
+#mesh = [32,16]
 # mesh = [16,16]
+#mesh = [16,8]
+mesh = [2,2]
 # mesh = None
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.01
 mu = 0.05 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
 eta = 0.001 # Determines Re_m ; 0.001 -> Re_m = 1000
-rhoIni = 1 #rho0 is redefined later, and generally has a whole
+rhoIni = 1 #rho0 is redefined later, and generally has a whole mess associated with it
 gamma = 5./3.
 eta_sp = 2.7 * 10**(-4)
 eta_ch = 4.4 * 10**(-3)
@@ -77,7 +78,12 @@ nu = mu/rhoIni
 #diffusivities for heat (kappa -> chi), momentum (viscosity) (mu -> nu), current (eta)
 # life time of currents regulated by resistivity
 # linearization time of temperature goes like e^-t/kappa
-dealias=3/2
+
+# I assume we don't have a reason to use dealias yet
+# though I'm not quite sure how to identify 2h waves
+# that would warrant it, either.
+#dealias=3/2
+dealias=1
 
 #Coords, dist, bases
 coords = d3.CartesianCoordinates('x', 'y','z')
@@ -134,7 +140,7 @@ SSX.add_equation("integ(phi) = 0")
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta1*J2")
 
-solver = SSX.build_solver(d3.RK222) # (formerly 443; try both)
+solver = SSX.build_solver(d3.RK443) # (now 222, formerly 443; try both)
 
 logger.info("Solver built")
 
@@ -142,7 +148,7 @@ logger.info("Solver built")
 dt = 1e-4
 
 # Integration parameters
-solver.stop_sim_time = 20 #historically 20
+solver.stop_sim_time = 0.5 #historically 20
 solver.stop_wall_time = np.inf #e.g. 60*60*3 would limit runtime to three hours
 solver.stop_iteration = np.inf
 
@@ -152,17 +158,18 @@ rho0 = np.zeros_like(lnrho['g'])
 # Initial condition parameters
 R = r
 L = R
-lambda_rho = 0.4 # half-width of z transition region for initial conditions
-lambda_rho1 = 0.1 #Similar parameter, but used for r-direction transition
+# lambda_rho = 0.4 # half-width of z transition region for initial conditions - not used in current z transition
+# expression but good to keep in mind (refer to older IVP versions for full sine loop)
+lambda_rho1 = 0.2 #Similar parameter, but used for r-direction transition; historically 0.1, will try to smooth with 0.2
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope plasma) has delta = 0.1.
 
 # Spheromak initial condition
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-# aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
-# for i in range(3):
-#     A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
+aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
+for i in range(3):
+    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 
 
 # Frame for meta params in D3 with RealFourier
@@ -179,7 +186,7 @@ phi = parity(phi,1,scalar=True)
 
 #initial velocity - use z, or zVal??
 max_vel = 0.1
-##vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # was commented previously - 0 vel IC?
+v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 # v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
 
@@ -190,12 +197,14 @@ for i in range(x.shape[0]):
         yVal = y[0,j,0]
         for k in range(z.shape[2]):
             zVal = z[0,0,k]
+            # v version in for loop - i assume outside as written above is preferable, but not sure if that's doable
+            # with rho0, since not a dist.field()
             # v['g'][2] = -np.tanh(6*zVal - 6)*max_vel/2 + -np.tanh(6*zVal - 54)*max_vel/2
-            rho0[i][j][k] = -np.tanh(2*zVal-6)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
-            # rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1
-##########################################################################################################################################
-#-------------------------------enforcing circular cross-section of density---------------------------------------------------------------#
-##########################################################################################################################################
+
+            rho0[i][j][k] = -np.tanh(2*zVal-3)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-3)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
+            # rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper transition
+
+#enforcing circular cross-section of density
 
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
@@ -203,19 +212,16 @@ for i in range(x.shape[0]):
         yVal = y[0,j,0]
         for k in range(z.shape[2]):
             zVal = z[0,0,k]
-            rho0[i][j][k] = 1
             rad = np.sqrt(xVal**2 + yVal**2)
-##rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transistion
 
-##########################################################################################################################################
-#-----------------------------------------------sinusodial transition-----------------------------------------------------------------------------#
-##########################################################################################################################################
+##rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transition - this line working would require r being identified like how x and y are, which I don't know how to do (if possible)
 
-#It looks like the idea here was to copy the sinusoidal transition for density in the lengthwise and apply it to the radial direction.
-# Meanwhile, the transition in the z-direction was changed to the tanh further above?
+
+# sinusodial transition (what z-transition used to be, essentially)
+
             if(rad <= 1 - lambda_rho1):
                 rho0[i][j][k] = rho0[i][j][k]
-            elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)): # sine arg goes from pi/2 to -pi/2; so this should just generate a curve from rho0 to rhomi_min
+            elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)): # sine arg goes from pi/2 to -pi/2; so this should just generate a curve from rho0 to rho_min
                 rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)*np.sin((1-rad) * np.pi/(2*lambda_rho1))/2
             else:
                 rho0[i][j][k] = rho_min
@@ -223,7 +229,7 @@ for i in range(x.shape[0]):
 lnrho['g'] = np.log(rho0)
 T['g'] = T0 * rho0**(gamma - 1) # np.exp(lnrho['g'])
 
-##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0['g']))*(1 - np.exp((-v0_ch)/(3*rho0['g']*np.sqrt(gamma*T['g']))))
+##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0))*(1 - np.exp((-v0_ch)/(3*rho0*np.sqrt(gamma*T['g']))))
 
 # analysis output
 wall_dt_checkpoints = 2
@@ -231,9 +237,10 @@ output_cadence = 0.1 # This is in simulation time units
 
 fh_mode = 'overwrite'
 
-# load state for restart - does it matter where to put it?
+# load state for restart
 # also, does the virtual file work for restarting
-#It really is that easy.
+# Should just be this line - pretty straightforward.
+# not sure if want to switch fh to append when loading states.
 # solver.load_state("scratch/checkpoints2/checkpoints2_s1.h5")
 
 #handle data output dirs
@@ -266,7 +273,6 @@ field_writes.add_task(d3.curl(B), name='j')
 #Supposed to enforce positive rho, but still seeing negative numbers in h5 reader
 
 # These two should be only issues
-# Look in field_writes to see if T has negative values in it too
 field_writes.add_task(np.exp(lnrho), name = 'rho')
 field_writes.add_task(T)
 # field_writes.add_task(eta1)
@@ -287,7 +293,6 @@ flow.add_property(T, name = 'temp')
 flow.add_property(lnrho, name = 'log density')
 flow.add_property(np.exp(lnrho), name = 'density')
 flow.add_property(Cs_vec, name = 'Cs_vector')
-# flow.add_property(rhoTest, name = 'test rho')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
@@ -296,9 +301,8 @@ CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 1, safety = CFL_safety, 
 CFL.add_velocity(v)
 CFL.add_velocity(Va)
 CFL.add_velocity(Cs_vec)
-
 #not sure how to turn Cs into a vector; or if that's still something that we ought to be doing
-# Maybe this is what was previously preventing negative temperature?
+# But I will keep this expression with the unit vector dot prod addition in here fow now
 
 good_solution = True
 # Main loop
