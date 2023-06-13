@@ -140,7 +140,7 @@ SSX.add_equation("integ(phi) = 0")
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta1*J2")
 
-solver = SSX.build_solver(d3.RK443) # (now 222, formerly 443; try both)
+solver = SSX.build_solver(d3.RK222) # (now 222, formerly 443; try both)
 
 logger.info("Solver built")
 
