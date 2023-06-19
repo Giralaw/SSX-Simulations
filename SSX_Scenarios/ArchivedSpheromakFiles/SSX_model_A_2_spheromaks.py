@@ -24,6 +24,8 @@ equations in Dedalus.
 
 We use the vector potential, and enforce the Coulomb Gauge, div(A) = 0.
 
+This is the main file I'm using as reference when working on D3 version - Alex
+
 """
 
 import os
@@ -46,9 +48,7 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 28 cores, so mesh[0]*mesh[1]
 # should be a multiple of 28.
-nx = 28
-ny = 24
-nz = 180
+nx,ny,nz = 32,32,160 # 28, 24, 180
 r = 1
 length = 10
 
@@ -56,7 +56,8 @@ length = 10
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
 #mesh = None
-mesh = [14,12]
+#mesh = [14,12]
+mesh = [2,2]
 
 kappa = 0.01
 mu = 0.05
@@ -143,7 +144,7 @@ SSX.add_equation("phi = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*Lap(T) = - (gamma - 1) * T * divv  - vdotgrad(T) + (gamma - 1)*eta*J2")
 
-solver = SSX.build_solver(de.timesteppers.RK443)
+solver = SSX.build_solver(de.timesteppers.RK222) # prev 443
 
 # Initial timestep
 dt = 1e-4
@@ -291,6 +292,8 @@ flow.add_property("sqrt(vx*vx + vy*vy + vz*vz)", name = 'flow_speed')
 flow.add_property("sqrt(vx*vx + vy*vy + vz*vz) / sqrt(T)", name = 'Ma')
 flow.add_property("sqrt(Bx*Bx + By*By + Bz*Bz) / sqrt(rho)", name = 'Al_v')
 flow.add_property("T", name = 'temp')
+flow.add_property("exp(lnrho)",name='density')
+flow.add_property("lnrho",name='lnrho')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
@@ -319,13 +322,13 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'))
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, Min T = {:.2g}, Min density = {:.2g}, min log density = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('temp'),flow.min('density'),flow.min('lnrho'))
             logger.info(logger_string)
-            np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
-            np.clip(T['g'], 0.001, 1000, out=T['g'])
-            np.clip(vx['g'], -100, 100, out=vx['g'])
-            np.clip(vy['g'], -100, 100, out=vy['g'])
-            np.clip(vz['g'], -100, 100, out=vz['g'])
+            # np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
+            # np.clip(T['g'], 0.001, 1000, out=T['g'])
+            # np.clip(vx['g'], -100, 100, out=vx['g'])
+            # np.clip(vy['g'], -100, 100, out=vy['g'])
+            # np.clip(vz['g'], -100, 100, out=vz['g'])
             #np.clip(lnrho['g'], -4.9, 2, out=lnrho['g'])
             if not np.isfinite(Re_k_avg):
                 good_solution = False

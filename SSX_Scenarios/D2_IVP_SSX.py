@@ -45,8 +45,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 16
-ny = 16
+nx = 32
+ny = 32
 nz = 160
 r = 1
 length = 10
@@ -145,7 +145,7 @@ SSX.add_equation("phi = 0", condition = "(nx == 0) and (ny == 0) and (nz == 0)")
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*Lap(T) = - (gamma - 1) * T * divv  - vdotgrad(T) + (gamma - 1)*eta*J2")
 
-solver = SSX.build_solver(de.timesteppers.RK443)
+solver = SSX.build_solver(de.timesteppers.RK222) #formerly 443, but that always seems slow and jerky
 
 # Initial timestep
 dt = 1e-4

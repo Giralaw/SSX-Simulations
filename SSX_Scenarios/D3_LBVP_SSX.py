@@ -192,8 +192,8 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
 
     #Meta/Parity specifiers
     # e.g. A_i is even in i-basis, odd in other two (see func further below)
-    A = parity(A,0)
-    J = parity(J,0)
+    # A = parity(A,0)
+    # J = parity(J,0)
 
     # phi field not necessary if integ(A) is correct gauge
     # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis));

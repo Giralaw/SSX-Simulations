@@ -46,9 +46,9 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 28
-ny = 24
-nz = 180
+nx = 32
+ny = 32
+nz = 160
 r = 1
 length = 10
 
@@ -56,7 +56,8 @@ length = 10
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
 #mesh = None
-mesh = [14,12]
+#mesh = [14,12]
+mesh = [2,2]
 
 kappa = 0.01
 mu = 0.05

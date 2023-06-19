@@ -148,7 +148,7 @@ logger.info("Solver built")
 dt = 1e-4
 
 # Integration parameters
-solver.stop_sim_time = 0.5 #historically 20
+solver.stop_sim_time = 1 #historically 20
 solver.stop_wall_time = np.inf #e.g. 60*60*3 would limit runtime to three hours
 solver.stop_iteration = np.inf
 
@@ -160,7 +160,8 @@ R = r
 L = R
 # lambda_rho = 0.4 # half-width of z transition region for initial conditions - not used in current z transition
 # expression but good to keep in mind (refer to older IVP versions for full sine loop)
-lambda_rho1 = 0.2 #Similar parameter, but used for r-direction transition; historically 0.1, will try to smooth with 0.2
+# lambda_rho1 = 0.2 #Similar parameter, but used for r-direction transition; historically 0.1, will try to smooth with 0.2
+lambda_rho1 = 0.1
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope plasma) has delta = 0.1.
@@ -179,20 +180,20 @@ for i in range(3):
 # I don't see a particular reason they should be even or odd in each dimension
 # Apparently the parity can force zero values at boundaries, as a sort of faux-bc?
 # That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
-A = parity(A,0)
-v = parity(v,1)
-T = parity(T,0,scalar=True)
-lnrho = parity(lnrho,0,scalar=True)
-phi = parity(phi,1,scalar=True)
+# A = parity(A,0)
+# v = parity(v,1)
+# T = parity(T,0,scalar=True)
+# lnrho = parity(lnrho,0,scalar=True)
+# phi = parity(phi,1,scalar=True)
 
 
 #initial velocity - use z, or zVal??
 max_vel = 0.1
-v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
+# v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 # v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
 
-#should always use local grid - never loop over things like this, apparently
+# should always use local grid - never loop over things like this, apparently
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
     for j in range(y.shape[1]):
@@ -203,10 +204,10 @@ for i in range(x.shape[0]):
             # with rho0, since not a dist.field()
             # v['g'][2] = -np.tanh(6*zVal - 6)*max_vel/2 + -np.tanh(6*zVal - 54)*max_vel/2
 
-            rho0[i][j][k] = -np.tanh(2*zVal-3)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-3)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
-            # rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper transition
+            # rho0[i][j][k] = -np.tanh(2*zVal-3)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-3)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
+            rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper transition
 
-#enforcing circular cross-section of density
+# enforcing circular cross-section of density
 
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
@@ -263,11 +264,11 @@ if dist.comm.rank == 0:
 # wall_dt=wall_dt_checkpoints
 
 # Only look at data from checkpoints - 
-checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=20, iter = 10, mode = fh_mode) #other things big, this generally small (when not doing every iter) # but iter = 1 is the diagnostic term # sim_dt = 0.5*output_cadence
+checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, sim_dt = output_cadence, mode = fh_mode) #other things big, this generally small (when not doing every iter) # but iter = 1 is the diagnostic term # sim_dt = 0.5*output_cadence
 checkpoint.add_tasks(solver.state)
 
 
-field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 20, iter = 10, mode = fh_mode)
+field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 20, sim_dt = output_cadence, mode = fh_mode)
 # trying to just put j for third one yields issues - because j not variable in problem? # sim_dt = output_cadence
 field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
@@ -298,7 +299,7 @@ flow.add_property(Cs_vec, name = 'Cs_vector')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
-CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 1, safety = CFL_safety, #cadence 10 or 1, reasons for either (higher dt resolution at merging point - check every 1)
+CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 10, safety = CFL_safety, #cadence 10 or 1, reasons for either (higher dt resolution at merging point - check every 1)
                      max_change = 1.5, min_change = 0.005, max_dt = output_cadence, threshold = 0.05)
 CFL.add_velocity(v)
 CFL.add_velocity(Va)
@@ -310,7 +311,7 @@ good_solution = True
 # Main loop
 try:
     logger.info('Starting loop')
-    logger_string = 'kappa: {:.3g}, mu: {:.3g}, eta: {:.3g}, dt: {:.3g}'.format(kappa, mu, eta, dt)
+    logger_string = 'kappa: {:.3g}, mu: {:.3g}, eta: {:.3g}, dt: {:.3g}'.format(kappa, mu, eta1, dt)
     logger.info(logger_string)
     while solver.proceed:
 
@@ -318,11 +319,11 @@ try:
         solver.step(dt)
 
         # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
-        A = parity(A,0)
-        v = parity(v,1)
-        T = parity(T,0,scalar=True)
-        lnrho = parity(lnrho,0,scalar=True)
-        phi = parity(phi,1,scalar=True)
+        # A = parity(A,0)
+        # v = parity(v,1)
+        # T = parity(T,0,scalar=True)
+        # lnrho = parity(lnrho,0,scalar=True)
+        # phi = parity(phi,1,scalar=True)
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
