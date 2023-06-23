@@ -110,8 +110,8 @@ J2 = j@j
 rho = np.exp(lnrho)
 B = d3.curl(A)
 #spitzer and chodra resistivity combination
-#eta1 = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))
-eta1 = 0.001
+eta1 = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))
+# eta1 = 0.001
 
 # CFL substitutions
 Va = B/np.sqrt(rho)
@@ -131,7 +131,7 @@ SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
 SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
-SSX.add_equation("dt(A) + grad(phi) + eta1*j = cross(v,B)")
+SSX.add_equation("dt(A) + grad(phi) = -eta1*j + cross(v,B)")
 
 #gauge constraints
 SSX.add_equation("div(A) + tau_A = 0")
@@ -311,7 +311,7 @@ good_solution = True
 # Main loop
 try:
     logger.info('Starting loop')
-    logger_string = 'kappa: {:.3g}, mu: {:.3g}, eta: {:.3g}, dt: {:.3g}'.format(kappa, mu, eta1, dt)
+    logger_string = 'kappa: {:.3g}, mu: {:.3g}, dt: {:.3g}'.format(kappa, mu, dt) # eta: {:.3g}, eta1
     logger.info(logger_string)
     while solver.proceed:
 
