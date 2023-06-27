@@ -14,10 +14,10 @@ if(len(sys.argv) != 2):
     sys.exit(0)
 else:
     it = int(sys.argv[1])
-file = 'load_data_two'
+file = 'fields_two'
 # with h5py.File("2Sph_Run4_TandRhobad/scratch/fields_two/fields_two_s1.h5", mode='r') as file:   
-with h5py.File('DataFolders/D3_SSX_Run1/'+file+'/'+file+'_s1.h5', mode='r') as file:
-    S = file['tasks']['T']
+with h5py.File('DataFolders/NoParity(Run14)/'+file+'/'+file+'_s1.h5', mode='r') as file:
+    S = file['tasks']['rho']
     #t = S.dims[0]['sim_time']
     #t = file['scales']['sim_time']
 
