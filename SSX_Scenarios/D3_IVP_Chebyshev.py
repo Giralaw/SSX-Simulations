@@ -91,7 +91,7 @@ dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
 
 xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r), dealias = dealias)
 ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r), dealias = dealias)
-zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length), dealias = dealias)
+zbasis = d3.Chebyshev(coords['z'], size=nz, bounds=(0, length), dealias = dealias)
 
 # Fields
 t = dist.Field(name='t')
@@ -140,6 +140,17 @@ SSX.add_equation("integ(phi) = 0")
 # Energy
 SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta1*J2")
 
+# Boundary Conditions
+SSX.add_equation("v(z='left') = 0") # no-slip
+# SSX.add_equation("ex@A(z='left') = 0")
+# SSX.add_equation("ey@A(z='left') = 0")
+# SSX.add_equation("phi(z='left') = 0")
+
+SSX.add_equation("v(z='right') = 0") # no-slip
+# SSX.add_equation("ex@A(z='right') = 0")
+# SSX.add_equation("ey@A(z='right') = 0")
+# SSX.add_equation("phi(z='right') = 0")
+
 solver = SSX.build_solver(d3.RK222) # (now 222, formerly 443; try both)
 
 logger.info("Solver built")
@@ -172,7 +183,7 @@ aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
 # for i in range(3):
 #    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
 for i in range(3):
-    A['g'][i] = aa['g'][i] 
+    A['g'][i] = aa['g'][i]
 
 
 # Frame for meta params in D3 with RealFourier
@@ -180,49 +191,11 @@ for i in range(3):
 # I don't see a particular reason they should be even or odd in each dimension
 # Apparently the parity can force zero values at boundaries, as a sort of faux-bc?
 # That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
-# A = parity(A,0)
-# v = parity(v,1)
-# T = parity(T,0,scalar=True)
-# lnrho = parity(lnrho,0,scalar=True)
-# phi = parity(phi,1,scalar=True)
-
-#Manual attempt at writing it the way *I* would expect the parity to work
-A['c'][0,1::2,0::1,0::1] = 0
-A['c'][0,0::1,0::2,0::1] = 0
-A['c'][0,0::1,0::1,0::2] = 0
-
-A['c'][1,0::2,0::1,0::1] = 0
-A['c'][1,0::1,1::2,0::1] = 0
-A['c'][1,0::1,0::1,0::2] = 0
-
-A['c'][2,0::2,0::1,0::1] = 0
-A['c'][2,0::1,0::2,0::1] = 0
-A['c'][2,0::1,0::1,1::2] = 0
-
-v['c'][0,0::2,0::1,0::1] = 0
-v['c'][0,0::1,1::2,0::1] = 0
-v['c'][0,0::1,0::1,1::2] = 0
-
-v['c'][1,1::2,0::2,0::1] = 0
-v['c'][1,0::1,0::2,0::1] = 0
-v['c'][1,0::1,0::1,1::2] = 0
-
-
-v['c'][1,1::2,0::1,0::1] = 0
-v['c'][1,0::1,1::2,0::1] = 0
-v['c'][2,0::1,0::1,0::2] = 0
-
-T['c'][1::2,0::1,0::1] = 0
-T['c'][0::1,1::2,0::1] = 0
-T['c'][0::1,0::1,1::2] = 0
-
-lnrho['c'][1::2,0::1,0::1] = 0
-lnrho['c'][0::1,1::2,0::1] = 0
-lnrho['c'][0::1,0::1,1::2] = 0
-
-phi['c'][0::2,0::1,0::1] = 0
-phi['c'][0::1,0::2,0::1] = 0
-phi['c'][0::1,0::1,0::2] = 0
+A = parity(A,0)
+v = parity(v,1)
+T = parity(T,0,scalar=True)
+lnrho = parity(lnrho,0,scalar=True)
+phi = parity(phi,1,scalar=True)
 
 
 #initial velocity - use z, or zVal??
@@ -361,11 +334,11 @@ try:
         solver.step(dt)
 
         # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
-        # A = parity(A,0)
-        # v = parity(v,1)
-        # T = parity(T,0,scalar=True)
-        # lnrho = parity(lnrho,0,scalar=True)
-        # phi = parity(phi,1,scalar=True)
+        A = parity(A,0)
+        v = parity(v,1)
+        T = parity(T,0,scalar=True)
+        lnrho = parity(lnrho,0,scalar=True)
+        phi = parity(phi,1,scalar=True)
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
