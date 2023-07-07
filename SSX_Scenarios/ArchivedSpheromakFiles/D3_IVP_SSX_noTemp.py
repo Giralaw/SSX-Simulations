@@ -98,7 +98,7 @@ t = dist.Field(name='t')
 v = dist.VectorField(coords, name='v', bases=(xbasis, ybasis, zbasis))
 A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
 lnrho = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
-T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
+#T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
 phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
 tau_A = dist.Field(name='tau_A')
 # eta1 = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
@@ -115,11 +115,11 @@ eta1 = 0.001
 
 # CFL substitutions
 Va = B/np.sqrt(rho)
-Cs = np.sqrt(gamma*T)
-Cs_vec = Cs*ex + Cs*ey + Cs *ez
+#Cs = np.sqrt(gamma*T)
+#Cs_vec = Cs*ex + Cs*ey + Cs *ez
 
 #Problem
-SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
+SSX = d3.IVP([v, A, lnrho, phi, tau_A], time=t, namespace=locals())
 
 #variable resistivity
 # SSX.add_equation("eta1 = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))")
@@ -128,7 +128,8 @@ SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
 SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
 
 # Momentum
-SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
+# SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
+SSX.add_equation("dt(v) - nu*lap(v) = grad(lnrho) - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
 SSX.add_equation("dt(A) + grad(phi) = -eta1*j + cross(v,B)")
@@ -138,7 +139,8 @@ SSX.add_equation("div(A) + tau_A = 0")
 SSX.add_equation("integ(phi) = 0")
 
 # Energy
-SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta1*J2")
+# SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta1*J2")
+# SSX.add_equation("0 = - (gamma - 1) * div(v) + (gamma - 1)*eta1*J2")
 
 solver = SSX.build_solver(d3.RK222) # (now 222, formerly 443; try both)
 
@@ -169,10 +171,10 @@ delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope 
 # Spheromak initial condition
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
 aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
-for i in range(3):
-   A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
 # for i in range(3):
-#     A['g'][i] = aa['g'][i]
+#    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
+for i in range(3):
+    A['g'][i] = aa['g'][i]
 
 
 # Frame for meta params in D3 with RealFourier
@@ -186,17 +188,17 @@ for i in range(3):
 # zero_modes(lnrho,0,scalar=True)
 # zero_modes(phi,1,scalar=True)
 
-# A['c'][0,1::2,0::2,0::2] = 0
-# A['c'][1,0::2,1::2,0::2] = 0
-# A['c'][2,0::2,0::2,1::2] = 0
+A['c'][0,1::2,0::2,0::2] = 0
+A['c'][1,0::2,1::2,0::2] = 0
+A['c'][2,0::2,0::2,1::2] = 0
 
-# v['c'][0,0::2,1::2,1::2] = 0
-# v['c'][1,1::2,0::2,1::2] = 0
-# v['c'][2,1::2,1::2,0::2] = 0
+v['c'][0,0::2,1::2,1::2] = 0
+v['c'][1,1::2,0::2,1::2] = 0
+v['c'][2,1::2,1::2,0::2] = 0
 
 # T['c'][1::2,1::2,1::2] = 0
-# lnrho['c'][1::2,1::2,1::2] = 0
-# phi['c'][0::2,0::2,0::2] = 0
+lnrho['c'][1::2,1::2,1::2] = 0
+phi['c'][0::2,0::2,0::2] = 0
 
 #initial velocity - use z, or zVal??
 max_vel = 0.1
@@ -236,37 +238,16 @@ for i in range(x.shape[0]):
 
 
 # sinusodial transition (what z-transition used to be, essentially)
-# This appears to be where the negative initial density is coming from, more or less. Note that even with the extra inequalities
-# at the end the density still starts negative here. While in the D2 version of this code (also in this folder), it does not.
-# This suggests that there is something later in the code that is messing with this, OR that interpolation is somehow different
-# in this code than in the D2 code. That would be due to some sort of structural difference between them, the only one of which
-# has seemed relevant thus far in my investigations is parity enforcement for the basis (even though parity is off in this
-# code right now)
-
-# could always be something else I've forgotten or haven't thought of yet.
-
-# Do note that commenting all lines below here except the one setting the density to a constant of 1 DOES lead to the density minimum just being
-# positive one in the timestepping readouts. So that somehow works or is unaffected by whatever is messing with this later.
-# commenting these various additional density setting lines in and out and also commenting the sinusoidial transition in and out
-# is suggested to get an idea for what effect each combination has. Suggestions as to what the solution to this problem may be
-# are MOST WELCOME.
-            # rho0[i,j,k] = 1
 
             if(rad <= 1 - lambda_rho1):
-               rho0[i][j][k] = rho0[i][j][k]
-            elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)):
-               rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)/2*np.sin((1-rad) * np.pi/(2*lambda_rho1))
+                rho0[i][j][k] = rho0[i][j][k]
+            elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)): # sine arg goes from pi/2 to -pi/2; so this should just generate a curve from rho0 to rho_min
+                rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)*np.sin((1-rad) * np.pi/(2*lambda_rho1))/2
             else:
-               rho0[i][j][k] = rho_min
-            
-            #extra debugging enforcement lines - even with these, it reads some negative initial density
-            if rho0[i,j,k] < rho_min:
-                rho0[i,j,k] = 1
-            if rho0[i][j][k] < rho_min:
-                rho0[i][j][k] = 1
+                rho0[i][j][k] = rho_min
 
 lnrho['g'] = np.log(rho0)
-T['g'] = T0 * rho0**(gamma - 1) # np.exp(lnrho['g'])
+# T['g'] = T0 * rho0**(gamma - 1) # np.exp(lnrho['g'])
 
 ##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0))*(1 - np.exp((-v0_ch)/(3*rho0*np.sqrt(gamma*T['g']))))
 
@@ -313,7 +294,7 @@ field_writes.add_task(d3.curl(B), name='j')
 
 # These two should be only issues
 field_writes.add_task(np.exp(lnrho), name = 'rho')
-field_writes.add_task(T)
+#field_writes.add_task(T)
 # field_writes.add_task(eta1)
 
 # Helicity
@@ -326,12 +307,12 @@ flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
 flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
 flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
 flow.add_property(np.sqrt(v@v), name = 'flow_speed')
-flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
+#flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
 flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
-flow.add_property(T, name = 'temp')
+#flow.add_property(T, name = 'temp')
 flow.add_property(lnrho, name = 'log density')
 flow.add_property(np.exp(lnrho), name = 'density')
-flow.add_property(Cs_vec, name = 'Cs_vector')
+#flow.add_property(Cs_vec, name = 'Cs_vector')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
@@ -339,7 +320,7 @@ CFL = flow_tools.CFL(solver, initial_dt = dt, cadence = 10, safety = CFL_safety,
                      max_change = 1.5, min_change = 0.005, max_dt = output_cadence, threshold = 0.05)
 CFL.add_velocity(v)
 CFL.add_velocity(Va)
-CFL.add_velocity(Cs_vec)
+#CFL.add_velocity(Cs_vec)
 #not sure how to turn Cs into a vector; or if that's still something that we ought to be doing
 # But I will keep this expression with the unit vector dot prod addition in here fow now
 
@@ -361,17 +342,17 @@ try:
         # zero_modes(lnrho,0,scalar=True)
         # zero_modes(phi,1,scalar=True)
 
-        # A['c'][0,1::2,0::2,0::2] = 0
-        # A['c'][1,0::2,1::2,0::2] = 0
-        # A['c'][2,0::2,0::2,1::2] = 0
+        A['c'][0,1::2,0::2,0::2] = 0
+        A['c'][1,0::2,1::2,0::2] = 0
+        A['c'][2,0::2,0::2,1::2] = 0
 
-        # v['c'][0,0::2,1::2,1::2] = 0
-        # v['c'][1,1::2,0::2,1::2] = 0
-        # v['c'][2,1::2,1::2,0::2] = 0
+        v['c'][0,0::2,1::2,1::2] = 0
+        v['c'][1,1::2,0::2,1::2] = 0
+        v['c'][2,1::2,1::2,0::2] = 0
 
-        # T['c'][1::2,1::2,1::2] = 0
-        # lnrho['c'][1::2,1::2,1::2] = 0
-        # phi['c'][0::2,0::2,0::2] = 0
+        #T['c'][1::2,1::2,1::2] = 0
+        lnrho['c'][1::2,1::2,1::2] = 0
+        phi['c'][0::2,0::2,0::2] = 0
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
@@ -380,7 +361,7 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'),flow.min('Al_v')) #min test rho = {:.2g}, flow.min('test rho')
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g},, min log rho = {:.2g}, min rho = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.min('log density'), flow.min('density'),flow.min('Al_v')) #min test rho = {:.2g}, flow.min('test rho')
             logger.info(logger_string)
 
             if not np.isfinite(Re_k_avg):

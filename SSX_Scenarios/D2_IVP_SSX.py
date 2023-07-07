@@ -175,7 +175,7 @@ rho0 = np.zeros_like(lnrho['g'])
 R = r
 L = R
 lambda_rho = 0.4 # half-width of transition region for initial conditions
-lambda_rho1 = 0.1
+# lambda_rho1 = 0.1
 lambda_rho1 = 0.2 # smoother transition version?
 rho_min = 0.011
 T0 = 0.1
@@ -222,17 +222,17 @@ for i in range(x.shape[0]):
        yVal = y[0,j,0]
        for k in range(z.shape[2]):
             zVal = z[0,0,k]
-            r = np.sqrt(xVal**2 + yVal**2)
+            rad = np.sqrt(xVal**2 + yVal**2)
 #rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transistion
 
 ##########################################################################################################################################
 #-----------------------------------------------sinusodial transition-----------------------------------------------------------------------------#
 ##########################################################################################################################################
 
-            if(r <= 1 - lambda_rho1):
+            if(rad <= 1 - lambda_rho1):
                rho0[i][j][k] = rho0[i][j][k]
-            elif((r >= 1 - lambda_rho1 and r <= 1 + lambda_rho1)):
-               rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)/2*np.sin((1-r) * np.pi/(2*lambda_rho1))
+            elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)):
+               rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)/2*np.sin((1-rad) * np.pi/(2*lambda_rho1))
             else:
                rho0[i][j][k] = rho_min
 
@@ -293,6 +293,7 @@ flow.add_property("sqrt(vx*vx + vy*vy + vz*vz) / sqrt(T)", name = 'Ma')
 flow.add_property("sqrt(Bx*Bx + By*By + Bz*Bz) / sqrt(rho)", name = 'Al_v')
 flow.add_property("T", name = 'temp')
 flow.add_property("exp(lnrho)", name = 'density')
+flow.add_property("lnrho", name = 'log density')
 
 char_time = 1. # this should be set to a characteristic time in the problem (the alfven crossing time of the tube, for example)
 CFL_safety = 0.3
@@ -321,7 +322,7 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, Min T = {:.2g}, Min rho = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('temp'), flow.min('density'))
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, Min T = {:.2g}, Min rho = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('temp'), flow.min('density'))
             logger.info(logger_string)
             if not np.isfinite(Re_k_avg):
                 good_solution = False
