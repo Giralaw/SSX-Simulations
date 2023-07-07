@@ -39,7 +39,7 @@ import dedalus.public as d3
 from dedalus.extras import flow_tools
 
 
-from D3_LBVP_SSX import spheromak_pair, parity
+from D3_LBVP_SSX import spheromak_pair, zero_modes
 
 import logging
 logger = logging.getLogger(__name__)
@@ -62,7 +62,7 @@ length = 10
 # mesh = [16,16]
 #mesh = [16,8]
 mesh = [2,2]
-# mesh = None
+#mesh = None
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.01
@@ -82,8 +82,8 @@ nu = mu/rhoIni
 # I assume we don't have a reason to use dealias yet
 # though I'm not quite sure how to identify 2h waves
 # that would warrant it, either.
-# dealias=3/2
-dealias=1
+dealias=3/2
+# dealias=1
 
 #Coords, dist, bases
 coords = d3.CartesianCoordinates('x', 'y','z')
@@ -160,8 +160,8 @@ R = r
 L = R
 # lambda_rho = 0.4 # half-width of z transition region for initial conditions - not used in current z transition
 # expression but good to keep in mind (refer to older IVP versions for full sine loop)
-# lambda_rho1 = 0.2 #Similar parameter, but used for r-direction transition; historically 0.1, will try to smooth with 0.2
-lambda_rho1 = 0.1
+lambda_rho1 = 0.2 #Similar parameter, but used for r-direction transition; historically 0.1, will try to smooth with 0.2
+# lambda_rho1 = 0.1
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope plasma) has delta = 0.1.
@@ -172,7 +172,7 @@ aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
 # for i in range(3):
 #    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
 for i in range(3):
-    A['g'][i] = aa['g'][i] 
+    A['g'][i] = aa['g'][i]
 
 
 # Frame for meta params in D3 with RealFourier
@@ -180,54 +180,27 @@ for i in range(3):
 # I don't see a particular reason they should be even or odd in each dimension
 # Apparently the parity can force zero values at boundaries, as a sort of faux-bc?
 # That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
-# A = parity(A,0)
-# v = parity(v,1)
-# T = parity(T,0,scalar=True)
-# lnrho = parity(lnrho,0,scalar=True)
-# phi = parity(phi,1,scalar=True)
+# zero_modes(A,0)
+# zero_modes(v,1)
+# zero_modes(T,0,scalar=True)
+# zero_modes(lnrho,0,scalar=True)
+# zero_modes(phi,1,scalar=True)
 
-#Manual attempt at writing it the way *I* would expect the parity to work
-A['c'][0,1::2,0::1,0::1] = 0
-A['c'][0,0::1,0::2,0::1] = 0
-A['c'][0,0::1,0::1,0::2] = 0
+A['c'][0,1::2,0::2,0::2] = 0
+A['c'][1,0::2,1::2,0::2] = 0
+A['c'][2,0::2,0::2,1::2] = 0
 
-A['c'][1,0::2,0::1,0::1] = 0
-A['c'][1,0::1,1::2,0::1] = 0
-A['c'][1,0::1,0::1,0::2] = 0
+v['c'][0,0::2,1::2,1::2] = 0
+v['c'][1,1::2,0::2,1::2] = 0
+v['c'][2,1::2,1::2,0::2] = 0
 
-A['c'][2,0::2,0::1,0::1] = 0
-A['c'][2,0::1,0::2,0::1] = 0
-A['c'][2,0::1,0::1,1::2] = 0
-
-v['c'][0,0::2,0::1,0::1] = 0
-v['c'][0,0::1,1::2,0::1] = 0
-v['c'][0,0::1,0::1,1::2] = 0
-
-v['c'][1,1::2,0::2,0::1] = 0
-v['c'][1,0::1,0::2,0::1] = 0
-v['c'][1,0::1,0::1,1::2] = 0
-
-
-v['c'][1,1::2,0::1,0::1] = 0
-v['c'][1,0::1,1::2,0::1] = 0
-v['c'][2,0::1,0::1,0::2] = 0
-
-T['c'][1::2,0::1,0::1] = 0
-T['c'][0::1,1::2,0::1] = 0
-T['c'][0::1,0::1,1::2] = 0
-
-lnrho['c'][1::2,0::1,0::1] = 0
-lnrho['c'][0::1,1::2,0::1] = 0
-lnrho['c'][0::1,0::1,1::2] = 0
-
-phi['c'][0::2,0::1,0::1] = 0
-phi['c'][0::1,0::2,0::1] = 0
-phi['c'][0::1,0::1,0::2] = 0
-
+T['c'][1::2,1::2,1::2] = 0
+lnrho['c'][1::2,1::2,1::2] = 0
+phi['c'][0::2,0::2,0::2] = 0
 
 #initial velocity - use z, or zVal??
 max_vel = 0.1
-# v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
+v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 # v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
 
 
@@ -241,8 +214,8 @@ for i in range(x.shape[0]):
             # v version in for loop - i assume outside as written above is preferable, but not sure if that's doable
             # with rho0, since not a dist.field()
             # v['g'][2] = -np.tanh(6*zVal - 6)*max_vel/2 + -np.tanh(6*zVal - 54)*max_vel/2
-            # rho0[i][j][k] = -np.tanh(2*zVal-3)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-3)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
-            rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper transition
+            rho0[i][j][k] = -np.tanh(2*zVal-3)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-3)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
+            # rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper transition
 
             #initial vector potential when using dealias = 3/2:
             A['g'][0,i,j,k] = aa['g'][0,i,j,k] *(1 + delta*xVal*np.exp(-zVal**2) + delta*xVal*np.exp(-(zVal-10)**2))
@@ -361,11 +334,23 @@ try:
         solver.step(dt)
 
         # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
-        # A = parity(A,0)
-        # v = parity(v,1)
-        # T = parity(T,0,scalar=True)
-        # lnrho = parity(lnrho,0,scalar=True)
-        # phi = parity(phi,1,scalar=True)
+        # zero_modes(A,0)
+        # zero_modes(v,1)
+        # zero_modes(T,0,scalar=True)
+        # zero_modes(lnrho,0,scalar=True)
+        # zero_modes(phi,1,scalar=True)
+
+        A['c'][0,1::2,0::2,0::2] = 0
+        A['c'][1,0::2,1::2,0::2] = 0
+        A['c'][2,0::2,0::2,1::2] = 0
+
+        v['c'][0,0::2,1::2,1::2] = 0
+        v['c'][1,1::2,0::2,1::2] = 0
+        v['c'][2,1::2,1::2,0::2] = 0
+
+        T['c'][1::2,1::2,1::2] = 0
+        lnrho['c'][1::2,1::2,1::2] = 0
+        phi['c'][0::2,0::2,0::2] = 0
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)

@@ -192,13 +192,21 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
 
     #Meta/Parity specifiers
     # e.g. A_i is even in i-basis, odd in other two (see func further below)
-    # A = parity(A,0)
-    # J = parity(J,0)
+    # zero_modes(A,0)
+    # zero_modes(J,0)
+
+    A['c'][0,1::2,0::2,0::2] = 0
+    A['c'][1,0::2,1::2,0::2] = 0
+    A['c'][2,0::2,0::2,1::2] = 0
+
+    J['c'][0,1::2,0::2,0::2] = 0
+    J['c'][1,0::2,1::2,0::2] = 0
+    J['c'][2,0::2,0::2,1::2] = 0
 
     # phi field not necessary if integ(A) is correct gauge
-    # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis));
+    # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis))
     tau_phi = dist.VectorField(coords, name='tau_phi')
-    B = d3.curl(A).evaluate()
+    # B = d3.curl(A).evaluate()
 
     #h5py documentation - write B field into it
 
@@ -207,10 +215,11 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # Force Free Equations/Spheromak """
 
     # lap(A) = -J
-    # Need to come up with a good way to check if what this gives is correct. Add a task to this to make an h5 file that saves A or B.
-    problem.add_equation("lap(A) + tau_phi =  -J") # + grad(phi) term for Div(A) case
-    problem.add_equation("integ(A) = 0") #check if this gives divA = 0
-    # problem.add_equation("div(A) = 0")
+    # Need to come up with a good way to check if what this gives is correct.
+    problem.add_equation("lap(A) + tau_phi =  -J") # + grad(phi) term for Div(A) case # + tau_phi
+    problem.add_equation("integ(A) = 0")
+    # problem.add_equation("div(A) = 0") # haven't been able to implement coulomb gauge instead of integ gauge here yet.
+    # Need to figure out why it isn't working, since it doesn't seem that integ(A) is an equivalent gauge.
 
 
     #Building the solver """
@@ -222,9 +231,11 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     
     return A
 
-def parity(initfield, par, scalar=False):
+def zero_modes(initfield, par, scalar=False):
 #enforce meta parity parameters on fields - 0 is even/cosine, 1 is odd/sine
+# modifies the field passed in to have zeroed odd or even modes acc. to second and third args.
 # Works for our 2:1 parity cycles and scalar fields- not general for any combination.
+# Does this return the object that's been modified? Or does it return the original? This is an aspect of OOP I'm not sure of.
     if scalar == True:
         initfield['c'][1-par::2,1-par::2,1-par::2] = 0
     else:

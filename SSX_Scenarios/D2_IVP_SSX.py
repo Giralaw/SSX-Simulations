@@ -45,9 +45,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx = 32
-ny = 32
-nz = 160
+nx,ny,nz = 32,32, 160
+# nx,ny,nz = 64,64,320
 r = 1
 length = 10
 
@@ -177,6 +176,7 @@ R = r
 L = R
 lambda_rho = 0.4 # half-width of transition region for initial conditions
 lambda_rho1 = 0.1
+lambda_rho1 = 0.2 # smoother transition version?
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
@@ -190,6 +190,7 @@ Az['g'] = aa_z*(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2))
 #initial velocity
 max_vel = 0.1
 #vz['g'] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
+vz['g'] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2 # smoother vel trans.
 
 for i in range(x.shape[0]):
     xVal = x[i,0,0]
@@ -197,7 +198,8 @@ for i in range(x.shape[0]):
        yVal = y[0,j,0]
        for k in range(z.shape[2]):
            zVal = z[0,0,k]
-           rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
+           # rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
+           rho0[i][j][k] = -np.tanh(2*zVal-3)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-3)*(1-rho_min)/2 + 1 # smoother density transition
 
 ##########################################################################################################################################
 #--------------------------------------density in the z direction with cosine transition ----------------------------------------------#
