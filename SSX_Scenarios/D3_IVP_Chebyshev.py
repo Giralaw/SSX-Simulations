@@ -93,6 +93,8 @@ xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r), dealias = dealias)
 ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r), dealias = dealias)
 zbasis = d3.Chebyshev(coords['z'], size=nz, bounds=(0, length), dealias = dealias)
 
+#Drop all periodic terms
+
 # Fields
 t = dist.Field(name='t')
 v = dist.VectorField(coords, name='v', bases=(xbasis, ybasis, zbasis))
@@ -191,11 +193,12 @@ for i in range(3):
 # I don't see a particular reason they should be even or odd in each dimension
 # Apparently the parity can force zero values at boundaries, as a sort of faux-bc?
 # That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
-A = parity(A,0)
-v = parity(v,1)
-T = parity(T,0,scalar=True)
-lnrho = parity(lnrho,0,scalar=True)
-phi = parity(phi,1,scalar=True)
+# no parity with cheby for now
+# A = parity(A,0)
+# v = parity(v,1)
+# T = parity(T,0,scalar=True)
+# lnrho = parity(lnrho,0,scalar=True)
+# phi = parity(phi,1,scalar=True)
 
 
 #initial velocity - use z, or zVal??
@@ -334,11 +337,12 @@ try:
         solver.step(dt)
 
         # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
-        A = parity(A,0)
-        v = parity(v,1)
-        T = parity(T,0,scalar=True)
-        lnrho = parity(lnrho,0,scalar=True)
-        phi = parity(phi,1,scalar=True)
+        # no parity with cheby for now
+        # A = parity(A,0)
+        # v = parity(v,1)
+        # T = parity(T,0,scalar=True)
+        # lnrho = parity(lnrho,0,scalar=True)
+        # phi = parity(phi,1,scalar=True)
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)

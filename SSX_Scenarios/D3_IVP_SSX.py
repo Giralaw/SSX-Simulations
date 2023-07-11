@@ -48,8 +48,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-#nx,ny,nz = 64,64,320
+# nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+nx,ny,nz = 64,64,160
 #nx,ny,nz = 128,128,640
 r = 1
 length = 10
@@ -66,8 +66,9 @@ mesh = [2,2]
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.01
+# try both of these 0.1 see what happens
 mu = 0.05 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
-eta = 0.001 # Determines Re_m ; 0.001 -> Re_m = 1000
+eta1 = 0.01 # Determines Re_m ; 0.001 -> Re_m = 1000
 rhoIni = 1 #rho0 is redefined later, and generally has a whole mess associated with it
 gamma = 5./3.
 eta_sp = 2.7 * 10**(-4)
@@ -111,7 +112,6 @@ rho = np.exp(lnrho)
 B = d3.curl(A)
 #spitzer and chodra resistivity combination
 # eta1 = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))
-eta1 = 0.001
 
 # CFL substitutions
 Va = B/np.sqrt(rho)
@@ -126,6 +126,11 @@ SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
 
 # Continuity
 SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
+
+# Not really good model but this would be how you'd express incomp.
+# SSX.add-equation("div(v) + tau_p = 0")
+# sqrt(sum(|lnrhoD2 - lnrhoD3|^2)) (L2)
+
 
 # Momentum
 SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
@@ -186,17 +191,17 @@ for i in range(3):
 # zero_modes(lnrho,0,scalar=True)
 # zero_modes(phi,1,scalar=True)
 
-# A['c'][0,1::2,0::2,0::2] = 0
-# A['c'][1,0::2,1::2,0::2] = 0
-# A['c'][2,0::2,0::2,1::2] = 0
+A['c'][0,1::2,0::2,0::2] = 0
+A['c'][1,0::2,1::2,0::2] = 0
+A['c'][2,0::2,0::2,1::2] = 0
 
-# v['c'][0,0::2,1::2,1::2] = 0
-# v['c'][1,1::2,0::2,1::2] = 0
-# v['c'][2,1::2,1::2,0::2] = 0
+v['c'][0,0::2,1::2,1::2] = 0
+v['c'][1,1::2,0::2,1::2] = 0
+v['c'][2,1::2,1::2,0::2] = 0
 
-# T['c'][1::2,1::2,1::2] = 0
-# lnrho['c'][1::2,1::2,1::2] = 0
-# phi['c'][0::2,0::2,0::2] = 0
+T['c'][1::2,1::2,1::2] = 0
+lnrho['c'][1::2,1::2,1::2] = 0
+phi['c'][0::2,0::2,0::2] = 0
 
 #initial velocity - use z, or zVal??
 max_vel = 0.1
@@ -251,6 +256,8 @@ for i in range(x.shape[0]):
 # is suggested to get an idea for what effect each combination has. Suggestions as to what the solution to this problem may be
 # are MOST WELCOME.
             # rho0[i,j,k] = 1
+            # Change this to tanh
+
 
             if(rad <= 1 - lambda_rho1):
                rho0[i][j][k] = rho0[i][j][k]
@@ -264,6 +271,8 @@ for i in range(x.shape[0]):
                 rho0[i,j,k] = 1
             if rho0[i][j][k] < rho_min:
                 rho0[i][j][k] = 1
+
+#"logical arrays in numpy"
 
 lnrho['g'] = np.log(rho0)
 T['g'] = T0 * rho0**(gamma - 1) # np.exp(lnrho['g'])
@@ -324,7 +333,7 @@ helicity_writes.add_task(A@B, name="helicity_at_pos")
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
 flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
-flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
+flow.add_property(np.sqrt(v@v) / eta1, name = 'Re_m')
 flow.add_property(np.sqrt(v@v), name = 'flow_speed')
 flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
 flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
@@ -347,7 +356,7 @@ good_solution = True
 # Main loop
 try:
     logger.info('Starting loop')
-    logger_string = 'kappa: {:.3g}, mu: {:.3g}, dt: {:.3g}'.format(kappa, mu, dt) # eta: {:.3g}, eta1
+    logger_string = 'kappa: {:.3g}, mu: {:.3g}, dt: {:.3g}'.format(kappa, mu, dt) # eta1: {:.3g}, eta1
     logger.info(logger_string)
     while solver.proceed:
 
@@ -361,17 +370,17 @@ try:
         # zero_modes(lnrho,0,scalar=True)
         # zero_modes(phi,1,scalar=True)
 
-        # A['c'][0,1::2,0::2,0::2] = 0
-        # A['c'][1,0::2,1::2,0::2] = 0
-        # A['c'][2,0::2,0::2,1::2] = 0
+        A['c'][0,1::2,0::2,0::2] = 0
+        A['c'][1,0::2,1::2,0::2] = 0
+        A['c'][2,0::2,0::2,1::2] = 0
 
-        # v['c'][0,0::2,1::2,1::2] = 0
-        # v['c'][1,1::2,0::2,1::2] = 0
-        # v['c'][2,1::2,1::2,0::2] = 0
+        v['c'][0,0::2,1::2,1::2] = 0
+        v['c'][1,1::2,0::2,1::2] = 0
+        v['c'][2,1::2,1::2,0::2] = 0
 
-        # T['c'][1::2,1::2,1::2] = 0
-        # lnrho['c'][1::2,1::2,1::2] = 0
-        # phi['c'][0::2,0::2,0::2] = 0
+        T['c'][1::2,1::2,1::2] = 0
+        lnrho['c'][1::2,1::2,1::2] = 0
+        phi['c'][0::2,0::2,0::2] = 0
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)

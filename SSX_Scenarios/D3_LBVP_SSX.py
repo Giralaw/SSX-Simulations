@@ -44,7 +44,8 @@ def getS1(r, z, L, R, zCenter):
                 elif(entry > R):
                     r1[i][j][k] = 0
                 else:
-                    r1[i][j][k] = 0.5
+                    # r1[i][j][k] = 0.5
+                    r1[i][j][k] = 0
                     print("r out of bounds!", r[i][j][k])
 
     #################################
@@ -106,10 +107,12 @@ def getS(r, z, L, R, zCenter):
                     #r1[i][j][k] = 0.5*(1 - np.cos(np.pi*(R/2 - entry)/lamJ))  # The function looks different then what is written in PSST. 2014, but it has the same result; ranging from R - lamJ to R.
                     r1[i][j][k] = 0.5*(1 - np.cos(np.pi*(R - entry)/lamJ))
                     # This part is inverted. Needs to be corrected.
+                    # What makes this inverted? It's written the same as in PSST 2014 paper. If anything, it would be GetS1 that should be "inverted" if we expect the opposite end to have rotational symmetry with original spheromak.
                 elif(entry > R):
                     r1[i][j][k] = 0
                 else:
-                    r1[i][j][k] = 0.5
+                    # r1[i][j][k] = 0.5
+                    r1[i][j][k] = 0 # should have 0 everywhere else due to nature of sinusoidial transition, no?
                     print("r out of bounds!", r[i][j][k])
 
     for i in range(z.shape[0]):
@@ -128,8 +131,12 @@ def getS(r, z, L, R, zCenter):
                 elif(val > L - zCenter):
                     z1[i][j][k] = 0
                 else:
+                    #Shouldn't necessarily matter since I haven't seen this
+                    # Conditional be reached at all, but it seems to me it ought
+                    # to be 0 instead of 1 in such a case?
                     print("z out of bounds!", entry)
-                    z1[i][j][k] = 1
+                    #z1[i][j][k] = 1
+                    z1[i][j][k] = 0
 
     S = r1 * z1
     return S
@@ -195,13 +202,13 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # zero_modes(A,0)
     # zero_modes(J,0)
 
-    # A['c'][0,1::2,0::2,0::2] = 0
-    # A['c'][1,0::2,1::2,0::2] = 0
-    # A['c'][2,0::2,0::2,1::2] = 0
+    A['c'][0,1::2,0::2,0::2] = 0
+    A['c'][1,0::2,1::2,0::2] = 0
+    A['c'][2,0::2,0::2,1::2] = 0
 
-    # J['c'][0,1::2,0::2,0::2] = 0
-    # J['c'][1,0::2,1::2,0::2] = 0
-    # J['c'][2,0::2,0::2,1::2] = 0
+    J['c'][0,1::2,0::2,0::2] = 0
+    J['c'][1,0::2,1::2,0::2] = 0
+    J['c'][2,0::2,0::2,1::2] = 0
 
     # phi field not necessary if integ(A) is correct gauge
     # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis))
