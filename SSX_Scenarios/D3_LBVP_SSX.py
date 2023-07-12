@@ -46,6 +46,10 @@ def getS1(r, z, L, R, zCenter):
                 else:
                     # r1[i][j][k] = 0.5
                     r1[i][j][k] = 0
+                    # I have never seen any of these out of bounds
+                    # print statements come up, so I think it's safe
+                    # to assume this and similar conditions
+                    # Do not occur when we're doing the LBVP
                     print("r out of bounds!", r[i][j][k])
 
     #################################
@@ -80,7 +84,7 @@ def getS1(r, z, L, R, zCenter):
     #    plot_2d(x, y, S[:, :, i], i)
     return S
 
-# Leaving alone for now
+# Leaving alone for now - isn't invoked anywhere at the moment.
 def plot_2d(x, y, z, i):
     plt.imshow(z, extent=(np.amin(x), np.amax(x), np.amin(y), np.amax(y)), cmap=plt.cm.hot)
     plt.colorbar()

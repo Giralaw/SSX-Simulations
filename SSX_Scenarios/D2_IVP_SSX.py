@@ -45,8 +45,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx,ny,nz = 32,32, 160
-# nx,ny,nz = 64,64,320
+# nx,ny,nz = 32,32, 160
+nx,ny,nz = 64,64,320
 r = 1
 length = 10
 
@@ -61,7 +61,7 @@ mesh = [2,2]
 
 kappa = 0.01
 mu = 0.05
-eta = 0.001
+eta = 0.01
 rhoIni = 1
 gamma = 5./3.
 eta_sp = 2.7 * 10**(-4)
@@ -175,8 +175,8 @@ rho0 = np.zeros_like(lnrho['g'])
 R = r
 L = R
 lambda_rho = 0.4 # half-width of transition region for initial conditions
-# lambda_rho1 = 0.1
-lambda_rho1 = 0.2 # smoother transition version?
+lambda_rho1 = 0.1
+# lambda_rho1 = 0.2 # smoother transition version?
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. PSST 2014 has delta = 0.1 .
@@ -342,5 +342,3 @@ finally:
     logger.info('Run time: %.2f sec' %(end_time-start_time))
     logger.info('Run time: %f cpu-hr' %((end_time-start_time)/60/60*domain.dist.comm_cart.size))
     logger.info('Iter/sec: {:g}'.format(solver.iteration/(end_time-start_time)))
-
-

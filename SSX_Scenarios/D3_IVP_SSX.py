@@ -165,8 +165,8 @@ R = r
 L = R
 # lambda_rho = 0.4 # half-width of z transition region for initial conditions - not used in current z transition
 # expression but good to keep in mind (refer to older IVP versions for full sine loop)
-lambda_rho1 = 0.2 #Similar parameter, but used for r-direction transition; historically 0.1, will try to smooth with 0.2
-# lambda_rho1 = 0.1
+# lambda_rho1 = 0.2 #Similar parameter, but used for r-direction transition; historically 0.1, will try to smooth with 0.2
+lambda_rho1 = 0.1
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope plasma) has delta = 0.1.
@@ -276,6 +276,20 @@ for i in range(x.shape[0]):
 
 lnrho['g'] = np.log(rho0)
 T['g'] = T0 * rho0**(gamma - 1) # np.exp(lnrho['g'])
+
+
+# Need to put zero mode here after initializing for initial fields to match, maybe?
+A['c'][0,1::2,0::2,0::2] = 0
+A['c'][1,0::2,1::2,0::2] = 0
+A['c'][2,0::2,0::2,1::2] = 0
+
+v['c'][0,0::2,1::2,1::2] = 0
+v['c'][1,1::2,0::2,1::2] = 0
+v['c'][2,1::2,1::2,0::2] = 0
+
+T['c'][1::2,1::2,1::2] = 0
+lnrho['c'][1::2,1::2,1::2] = 0
+phi['c'][0::2,0::2,0::2] = 0
 
 ##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0))*(1 - np.exp((-v0_ch)/(3*rho0*np.sqrt(gamma*T['g']))))
 
