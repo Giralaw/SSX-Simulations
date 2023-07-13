@@ -51,8 +51,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-# nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-nx,ny,nz = 64,64,160
+nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+# nx,ny,nz = 64,64,320
 #nx,ny,nz = 128,128,640
 r = 1
 length = 10
@@ -71,31 +71,28 @@ data_dir = "scratch" #change each time or overwrite
 kappa = 0.01
 # try both of these 0.1 see what happens
 mu = 0.05 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
-eta1 = 0.01 # Determines Re_m ; 0.001 -> Re_m = 1000
-rhoIni = 1 #rho0 is redefined later, and generally has a whole mess associated with it
+eta = 0.01 # Determines Re_m ; 0.001 -> Re_m = 1000; using smaller Rm of 100 for now since 1000 is a bit high.
+
+rhoInit = 0.01 #rho0 is redefined later, and generally has a whole mess associated with it
 gamma = 5./3.
+
 eta_sp = 2.7 * 10**(-4)
 eta_ch = 4.4 * 10**(-3)
 v0_ch = 2.9 * 10**(-2)
-chi = kappa/rhoIni
-nu = mu/rhoIni
+
+chi = kappa/rhoInit
+nu = mu/rhoInit
 #diffusivities for heat (kappa -> chi), momentum (viscosity) (mu -> nu), current (eta)
 # life time of currents regulated by resistivity
 # linearization time of temperature goes like e^-t/kappa
-
-# I assume we don't have a reason to use dealias yet
-# though I'm not quite sure how to identify 2h waves
-# that would warrant it, either.
-# dealias=3/2
-dealias=1
 
 #Coords, dist, bases
 coords = d3.CartesianCoordinates('x', 'y','z')
 dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
 
-xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r), dealias = dealias)
-ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r), dealias = dealias)
-zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length), dealias = dealias)
+xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
+ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
+zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length))
 
 # Fields
 t = dist.Field(name='t')
@@ -105,7 +102,7 @@ lnrho = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
 T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
 phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
 tau_A = dist.Field(name='tau_A')
-# eta1 = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
+# eta = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
 ex, ey, ez = coords.unit_vector_fields(dist)
 
 # Coulomb Gauge implies J = -Laplacian(A)
@@ -113,8 +110,9 @@ j = -d3.lap(A)
 J2 = j@j
 rho = np.exp(lnrho)
 B = d3.curl(A)
+
 #spitzer and chodra resistivity combination
-# eta1 = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))
+# eta = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))
 
 # CFL substitutions
 Va = B/np.sqrt(rho)
@@ -125,28 +123,26 @@ Cs_vec = Cs*ex + Cs*ey + Cs *ez
 SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
 
 #variable resistivity
-# SSX.add_equation("eta1 = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))")
+# SSX.add_equation("eta = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))")
 
 # Continuity
 SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
 
-# Not really good model but this would be how you'd express incomp.
+# Not really good model but this would be how you'd express incompressibility
 # SSX.add-equation("div(v) + tau_p = 0")
-# sqrt(sum(|lnrhoD2 - lnrhoD3|^2)) (L2)
-
 
 # Momentum
 SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
-SSX.add_equation("dt(A) + grad(phi) = -eta1*j + cross(v,B)")
+SSX.add_equation("dt(A) + grad(phi) + eta*j = cross(v,B)")
 
 #gauge constraints
 SSX.add_equation("div(A) + tau_A = 0")
 SSX.add_equation("integ(phi) = 0")
 
 # Energy
-SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta1*J2")
+SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta*J2")
 
 solver = SSX.build_solver(d3.RK222) # (now 222, formerly 443; try both)
 
@@ -161,7 +157,9 @@ solver.stop_wall_time = np.inf #e.g. 60*60*3 would limit runtime to three hours
 solver.stop_iteration = np.inf
 
 x,y,z = dist.local_grids(xbasis,ybasis,zbasis)
-rho0 = np.zeros_like(lnrho['g'])
+#rho0 = np.zeros_like(lnrho['g'])
+rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
+rho0['g'] = np.zeros_like(lnrho['g'])
 
 # Initial condition parameters
 R = r
@@ -179,14 +177,9 @@ delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope 
 aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
 for i in range(3):
    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
-# for i in range(3):
-#     A['g'][i] = aa['g'][i]
-
 
 # Frame for meta params in D3 with RealFourier
-# What is even our theoretical basis for these parities?
-# I don't see a particular reason they should be even or odd in each dimension
-# Apparently the parity can force zero values at boundaries, as a sort of faux-bc?
+# Apparently the parity can force zero values at boundaries, as makeshift approach to BCs.
 # That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
 # zero_modes(A,0)
 # zero_modes(v,1)
@@ -194,107 +187,43 @@ for i in range(3):
 # zero_modes(lnrho,0,scalar=True)
 # zero_modes(phi,1,scalar=True)
 
-A['c'][0,1::2,0::2,0::2] = 0
-A['c'][1,0::2,1::2,0::2] = 0
-A['c'][2,0::2,0::2,1::2] = 0
+# A['c'][0,1::2,0::2,0::2] = 0
+# A['c'][1,0::2,1::2,0::2] = 0
+# A['c'][2,0::2,0::2,1::2] = 0
 
-v['c'][0,0::2,1::2,1::2] = 0
-v['c'][1,1::2,0::2,1::2] = 0
-v['c'][2,1::2,1::2,0::2] = 0
+# v['c'][0,0::2,1::2,1::2] = 0
+# v['c'][1,1::2,0::2,1::2] = 0
+# v['c'][2,1::2,1::2,0::2] = 0
 
-T['c'][1::2,1::2,1::2] = 0
-lnrho['c'][1::2,1::2,1::2] = 0
-phi['c'][0::2,0::2,0::2] = 0
+# T['c'][1::2,1::2,1::2] = 0
+# lnrho['c'][1::2,1::2,1::2] = 0
+# phi['c'][0::2,0::2,0::2] = 0
 
-#initial velocity - use z, or zVal??
 max_vel = 0.1
 v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
-# v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2
+# v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # original steeper transition
 
+r = np.sqrt(x**2+y**2)
 
-# should always use local grid - never loop over things like this, apparently
-for i in range(x.shape[0]):
-    xVal = x[i,0,0]
-    for j in range(y.shape[1]):
-        yVal = y[0,j,0]
-        for k in range(z.shape[2]):
-            zVal = z[0,0,k]
-            # v version in for loop - i assume outside as written above is preferable, but not sure if that's doable
-            # with rho0, since not a dist.field()
-            # v['g'][2] = -np.tanh(6*zVal - 6)*max_vel/2 + -np.tanh(6*zVal - 54)*max_vel/2
-            rho0[i][j][k] = -np.tanh(2*zVal-3)*(1-rho_min)/2 -np.tanh(2*(10-zVal)-3)*(1-rho_min)/2 + 1 #density in the z direction with tanh transition
-            # rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper transition
+# still giving negative density?!
+zdist = -np.tanh(2*z-3)*(1-rho_min)/2 -np.tanh(2*(10-z)-3)*(1-rho_min)/2 + 1
+rdist = np.tanh(40*r+40)*(zdist-rho_min)/2 + np.tanh(40*(1-r))*(zdist-rho_min)/2 + rho_min
+rho0['g'] = rdist
 
-            #initial vector potential when using dealias = 3/2:
-            # A['g'][0,i,j,k] = aa['g'][0,i,j,k] *(1 + delta*xVal*np.exp(-zVal**2) + delta*xVal*np.exp(-(zVal-10)**2))
-            # A['g'][1,i,j,k] = aa['g'][1,i,j,k] *(1 + delta*xVal*np.exp(-zVal**2) + delta*xVal*np.exp(-(zVal-10)**2))
-            # A['g'][2,i,j,k] = aa['g'][2,i,j,k] *(1 + delta*xVal*np.exp(-zVal**2) + delta*xVal*np.exp(-(zVal-10)**2))
+# rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transition, adopted above
+# rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper z transition
 
-# enforcing circular cross-section of density
+# former piecewise sinusodial transition
+            # if(rad <= 1 - lambda_rho1):
+            #    rho0[i][j][k] = rho0[i][j][k]
+            # elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)):
+            #    rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)/2*np.sin((1-rad) * np.pi/(2*lambda_rho1))
+            # else:
+            #    rho0[i][j][k] = rho_min
 
-for i in range(x.shape[0]):
-    xVal = x[i,0,0]
-    for j in range(y.shape[1]):
-        yVal = y[0,j,0]
-        for k in range(z.shape[2]):
-            zVal = z[0,0,k]
-            rad = np.sqrt(xVal**2 + yVal**2)
-
-##rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transition - this line working would require r being identified like how x and y are, which I don't know how to do (if possible)
-
-
-# sinusodial transition (what z-transition used to be, essentially)
-# This appears to be where the negative initial density is coming from, more or less. Note that even with the extra inequalities
-# at the end the density still starts negative here. While in the D2 version of this code (also in this folder), it does not.
-# This suggests that there is something later in the code that is messing with this, OR that interpolation is somehow different
-# in this code than in the D2 code. That would be due to some sort of structural difference between them, the only one of which
-# has seemed relevant thus far in my investigations is parity enforcement for the basis (even though parity is off in this
-# code right now)
-
-# could always be something else I've forgotten or haven't thought of yet.
-
-# Do note that commenting all lines below here except the one setting the density to a constant of 1 DOES lead to the density minimum just being
-# positive one in the timestepping readouts. So that somehow works or is unaffected by whatever is messing with this later.
-# commenting these various additional density setting lines in and out and also commenting the sinusoidial transition in and out
-# is suggested to get an idea for what effect each combination has. Suggestions as to what the solution to this problem may be
-# are MOST WELCOME.
-            # rho0[i,j,k] = 1
-            # Change this to tanh
-
-
-            if(rad <= 1 - lambda_rho1):
-               rho0[i][j][k] = rho0[i][j][k]
-            elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)):
-               rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)/2*np.sin((1-rad) * np.pi/(2*lambda_rho1))
-            else:
-               rho0[i][j][k] = rho_min
-            
-            #extra debugging enforcement lines - even with these, it reads some negative initial density
-            if rho0[i,j,k] < rho_min:
-                rho0[i,j,k] = 1
-            if rho0[i][j][k] < rho_min:
-                rho0[i][j][k] = 1
-
-#"logical arrays in numpy"
-
-lnrho['g'] = np.log(rho0)
-T['g'] = T0 * rho0**(gamma - 1) # np.exp(lnrho['g'])
-
-
-# Need to put zero mode here after initializing for initial fields to match, maybe?
-A['c'][0,1::2,0::2,0::2] = 0
-A['c'][1,0::2,1::2,0::2] = 0
-A['c'][2,0::2,0::2,1::2] = 0
-
-v['c'][0,0::2,1::2,1::2] = 0
-v['c'][1,1::2,0::2,1::2] = 0
-v['c'][2,1::2,1::2,0::2] = 0
-
-T['c'][1::2,1::2,1::2] = 0
-lnrho['c'][1::2,1::2,1::2] = 0
-phi['c'][0::2,0::2,0::2] = 0
-
-##eta1['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0))*(1 - np.exp((-v0_ch)/(3*rho0*np.sqrt(gamma*T['g']))))
+lnrho['g'] = np.log(rho0['g'])
+T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
+##eta['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0))*(1 - np.exp((-v0_ch)/(3*rho0*np.sqrt(gamma*T['g']))))
 
 # analysis output
 wall_dt_checkpoints = 2
@@ -303,27 +232,12 @@ output_cadence = 0.1 # This is in simulation time units
 fh_mode = 'overwrite'
 
 # load state for restart
-# also, does the virtual file work for restarting
-# Should just be this line - pretty straightforward.
-# not sure if want to switch fh to append when loading states.
 # solver.load_state("scratch/checkpoints2/checkpoints2_s1.h5")
 
 #handle data output dirs
-# I'm realizing the else statement doesn't necessarily work so well for the Bridges job submitting scheme...
 if dist.comm.rank == 0:
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
-    # else:
-    #     ow = input("this directory already exists. Would you like to overwrite it? (y/n) ")
-    #     if ow == 'n':
-    #         name = input("what would you like to name the new directory? ('n' to cancel script) ")
-    #         if name == 'n':
-    #             print("please press ctrl-c.")
-    #             quit()
-    #         else:
-    #             os.mkdir(name)
-
-# wall_dt=wall_dt_checkpoints
 
 # Only look at data from checkpoints - 
 checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, sim_dt = output_cadence, mode = fh_mode) #other things big, this generally small (when not doing every iter) # but iter = 1 is the diagnostic term # sim_dt = 0.5*output_cadence
@@ -335,12 +249,11 @@ field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_t
 field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
 field_writes.add_task(d3.curl(B), name='j')
-#Supposed to enforce positive rho, but still seeing negative numbers in h5 reader
 
 # These two should be only issues
 field_writes.add_task(np.exp(lnrho), name = 'rho')
 field_writes.add_task(T)
-# field_writes.add_task(eta1)
+# field_writes.add_task(eta)
 
 # Helicity
 helicity_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=20, sim_dt = output_cadence, mode=fh_mode)
@@ -350,7 +263,7 @@ helicity_writes.add_task(A@B, name="helicity_at_pos")
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
 flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
-flow.add_property(np.sqrt(v@v) / eta1, name = 'Re_m')
+flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
 flow.add_property(np.sqrt(v@v), name = 'flow_speed')
 flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
 flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
@@ -373,10 +286,7 @@ good_solution = True
 # Main loop
 try:
     logger.info('Starting loop')
-    logger_string = 'kappa: {:.3g}, mu: {:.3g}, dt: {:.3g}'.format(kappa, mu, dt) # eta1: {:.3g}, eta1
-    logger.info(logger_string)
     while solver.proceed:
-
         dt = CFL.compute_timestep()
         solver.step(dt)
 
@@ -387,17 +297,17 @@ try:
         # zero_modes(lnrho,0,scalar=True)
         # zero_modes(phi,1,scalar=True)
 
-        A['c'][0,1::2,0::2,0::2] = 0
-        A['c'][1,0::2,1::2,0::2] = 0
-        A['c'][2,0::2,0::2,1::2] = 0
+        # A['c'][0,1::2,0::2,0::2] = 0
+        # A['c'][1,0::2,1::2,0::2] = 0
+        # A['c'][2,0::2,0::2,1::2] = 0
 
-        v['c'][0,0::2,1::2,1::2] = 0
-        v['c'][1,1::2,0::2,1::2] = 0
-        v['c'][2,1::2,1::2,0::2] = 0
+        # v['c'][0,0::2,1::2,1::2] = 0
+        # v['c'][1,1::2,0::2,1::2] = 0
+        # v['c'][2,1::2,1::2,0::2] = 0
 
-        T['c'][1::2,1::2,1::2] = 0
-        lnrho['c'][1::2,1::2,1::2] = 0
-        phi['c'][0::2,0::2,0::2] = 0
+        # T['c'][1::2,1::2,1::2] = 0
+        # lnrho['c'][1::2,1::2,1::2] = 0
+        # phi['c'][0::2,0::2,0::2] = 0
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
@@ -406,7 +316,7 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'),flow.min('Al_v')) #min test rho = {:.2g}, flow.min('test rho')
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'),flow.min('Al_v'))
             logger.info(logger_string)
 
             if not np.isfinite(Re_k_avg):
