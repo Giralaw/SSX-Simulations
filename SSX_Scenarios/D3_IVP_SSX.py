@@ -1,4 +1,4 @@
-"""SSX_model_A.py
+"""D3_IVP_SSX.py
 
 This is the *simplest* model we will consider for modeling spheromaks evolving in the SSX wind tunnel.
 
@@ -6,7 +6,7 @@ Major simplifications fall in two categories
 
 Geometry
 --------
-We consider a square duct using parity bases (sin/cos) in all directions. (RealFourier in D3)
+We consider a square duct using real Fourier bases (sin/cos) in all directions.
 
 Equations
 ---------
@@ -17,22 +17,19 @@ The equations themselves are those from Schaffner et al (2014), with the followi
 * no wall recycling term
 * no mass diffusion
 
-For this first model, rather than kinematic viscosity nu and thermal
+For this model, rather than kinematic viscosity nu and thermal
 diffusivity chi varying with density rho as they should, we are here
 holding them *constant*. This dramatically simplifies the form of the
 equations in Dedalus.
 
 We use the vector potential, and enforce the Coulomb Gauge, div(A) = 0.
 
-File formerly called D3_SSX_A_2_spheromaks
+File formerly called D3_SSX_A_2_spheromaks or similar
 - when looking for older versions, check both current name and that name.
 
-# This week I am working on solving T/rho unphysicalities.
+Currently working on solving T/rho unphysicalities.
 
 Dedalus 3 edits made by Alex Skeldon. Direct all queries to askeldo1@swarthmore.edu.
-
-# I will be changing the initializations in this and the LBVP to not have piecewise functions anymore,
-# because those are bad. These last piecewise versions will be saved in the archive folder for reference.
 """
 
 import numpy as np
@@ -51,8 +48,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-# nx,ny,nz = 64,64,320
+# nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+nx,ny,nz = 64,64,320
 #nx,ny,nz = 128,128,640
 r = 1
 length = 10
@@ -60,25 +57,25 @@ length = 10
 # for 3D runs, you can divide the work up over two dimensions (x and y).
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
-# mesh = [32,32]
+#mesh = [32,32]
 #mesh = [32,16]
-# mesh = [16,16]
+mesh = [16,16]
 #mesh = [16,8]
-mesh = [2,2]
+# mesh = [2,2]
 #mesh = None
-data_dir = "scratch" #change each time or overwrite
+data_dir = "scratchGoalParams" #change each time or overwrite
 
 kappa = 0.01
 # try both of these 0.1 see what happens
-mu = 0.05 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
-eta = 0.01 # Determines Re_m ; 0.001 -> Re_m = 1000; using smaller Rm of 100 for now since 1000 is a bit high.
+mu = 0.005 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
+eta = 0.001 # Determines Re_m ; 0.001 -> Re_m = 1000; using smaller Rm of 100 for now since 1000 is a bit high.
 
-rhoInit = 0.01 #rho0 is redefined later, and generally has a whole mess associated with it
+rhoInit = 1 #rho0 is redefined later, and generally has a whole mess associated with it
 gamma = 5./3.
 
-eta_sp = 2.7 * 10**(-4)
-eta_ch = 4.4 * 10**(-3)
-v0_ch = 2.9 * 10**(-2)
+# eta_sp = 2.7 * 10**(-4)
+# eta_ch = 4.4 * 10**(-3)
+# v0_ch = 2.9 * 10**(-2)
 
 chi = kappa/rhoInit
 nu = mu/rhoInit
@@ -152,7 +149,7 @@ logger.info("Solver built")
 dt = 1e-4
 
 # Integration parameters
-solver.stop_sim_time = 1 #historically 20
+solver.stop_sim_time = 20 #historically 20
 solver.stop_wall_time = np.inf #e.g. 60*60*3 would limit runtime to three hours
 solver.stop_iteration = np.inf
 
@@ -164,10 +161,7 @@ rho0['g'] = np.zeros_like(lnrho['g'])
 # Initial condition parameters
 R = r
 L = R
-# lambda_rho = 0.4 # half-width of z transition region for initial conditions - not used in current z transition
-# expression but good to keep in mind (refer to older IVP versions for full sine loop)
-# lambda_rho1 = 0.2 #Similar parameter, but used for r-direction transition; historically 0.1, will try to smooth with 0.2
-lambda_rho1 = 0.1
+# lambda_rho1 = 0.1 - not used in current tanh density distribution
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope plasma) has delta = 0.1.
@@ -199,13 +193,15 @@ for i in range(3):
 # lnrho['c'][1::2,1::2,1::2] = 0
 # phi['c'][0::2,0::2,0::2] = 0
 
+#First full-time run took a while to move towards each other, might want to increase max_vel, or modify the tanh distribution
 max_vel = 0.1
 v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 # v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # original steeper transition
 
 r = np.sqrt(x**2+y**2)
 
-# still giving negative density?!
+
+#Need to change from disk density distribution to a donut distribution
 zdist = -np.tanh(2*z-3)*(1-rho_min)/2 -np.tanh(2*(10-z)-3)*(1-rho_min)/2 + 1
 rdist = np.tanh(40*r+40)*(zdist-rho_min)/2 + np.tanh(40*(1-r))*(zdist-rho_min)/2 + rho_min
 rho0['g'] = rdist
@@ -232,7 +228,9 @@ output_cadence = 0.1 # This is in simulation time units
 fh_mode = 'overwrite'
 
 # load state for restart
-# solver.load_state("scratch/checkpoints2/checkpoints2_s1.h5")
+# Don't forget to switch to append for the mode when you load state!
+#solver.load_state("scratch/checkpoints2/checkpoints2_s1.h5")
+
 
 #handle data output dirs
 if dist.comm.rank == 0:
@@ -266,7 +264,8 @@ flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
 flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
 flow.add_property(np.sqrt(v@v), name = 'flow_speed')
 flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
-flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
+#flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
+flow.add_property(np.sqrt(B@B / rho), name = 'Al_v') # see if this makes it more positively well-behaved
 flow.add_property(T, name = 'temp')
 flow.add_property(lnrho, name = 'log density')
 flow.add_property(np.exp(lnrho), name = 'density')
@@ -316,7 +315,7 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, min log rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.min('log density'), flow.min('density'),flow.min('temp'),flow.min('Al_v'))
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, max log rho = {:.2g}, min log rho = {:.2g}, max rho = {;.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.max('log density'), flow.min('log density'), flow.max('density'), flow.min('density'),flow.min('temp'),flow.min('Al_v'))
             logger.info(logger_string)
 
             if not np.isfinite(Re_k_avg):

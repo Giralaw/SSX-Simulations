@@ -206,13 +206,13 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # zero_modes(A,0)
     # zero_modes(J,0)
 
-    A['c'][0,1::2,0::2,0::2] = 0
-    A['c'][1,0::2,1::2,0::2] = 0
-    A['c'][2,0::2,0::2,1::2] = 0
+    # A['c'][0,1::2,0::2,0::2] = 0
+    # A['c'][1,0::2,1::2,0::2] = 0
+    # A['c'][2,0::2,0::2,1::2] = 0
 
-    J['c'][0,1::2,0::2,0::2] = 0
-    J['c'][1,0::2,1::2,0::2] = 0
-    J['c'][2,0::2,0::2,1::2] = 0
+    # J['c'][0,1::2,0::2,0::2] = 0
+    # J['c'][1,0::2,1::2,0::2] = 0
+    # J['c'][2,0::2,0::2,1::2] = 0
 
     # phi field not necessary if integ(A) is correct gauge
     # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis))
