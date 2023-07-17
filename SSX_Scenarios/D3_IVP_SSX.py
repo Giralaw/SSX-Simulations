@@ -48,8 +48,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-# nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-nx,ny,nz = 64,64,320
+nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+#nx,ny,nz = 64,64,320
 #nx,ny,nz = 128,128,640
 r = 1
 length = 10
@@ -59,16 +59,16 @@ length = 10
 # of cores used.
 #mesh = [32,32]
 #mesh = [32,16]
-mesh = [16,16]
+# mesh = [16,16]
 #mesh = [16,8]
-# mesh = [2,2]
+mesh = [2,2]
 #mesh = None
 data_dir = "scratchGoalParams" #change each time or overwrite
 
 kappa = 0.01
 # try both of these 0.1 see what happens
 mu = 0.005 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
-eta = 0.001 # Determines Re_m ; 0.001 -> Re_m = 1000; using smaller Rm of 100 for now since 1000 is a bit high.
+eta = 0.01 # Determines Re_m ; 0.001 -> Re_m = 1000; using smaller Rm of 100 for now since 1000 is a bit high.
 
 rhoInit = 1 #rho0 is redefined later, and generally has a whole mess associated with it
 gamma = 5./3.
@@ -200,22 +200,18 @@ v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 
 r = np.sqrt(x**2+y**2)
 
+#Changed from disk density distribution to a donut distribution
+zdist = (np.tanh(2 (z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
+rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10 (r - 9/10)))*(1 - rho_min)/2 + rho_min
+rho0['g'] = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
 
-#Need to change from disk density distribution to a donut distribution
-zdist = -np.tanh(2*z-3)*(1-rho_min)/2 -np.tanh(2*(10-z)-3)*(1-rho_min)/2 + 1
-rdist = np.tanh(40*r+40)*(zdist-rho_min)/2 + np.tanh(40*(1-r))*(zdist-rho_min)/2 + rho_min
-rho0['g'] = rdist
+# zdist = -np.tanh(2*z-3)*(1-rho_min)/2 -np.tanh(2*(10-z)-3)*(1-rho_min)/2 + 1 #not in ax+b form
+# rdist = np.tanh(40*r+40)*(zdist-rho_min)/2 + np.tanh(40*(1-r))*(zdist-rho_min)/2 + rho_min old tanh disk distribution
+# rdist = (np.tanh(40*(r-1.7)+40)*(1-rho_min)/2+np.tanh(40*(1-r))*(1-rho_min)/2 + rho_min)
 
 # rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transition, adopted above
 # rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper z transition
 
-# former piecewise sinusodial transition
-            # if(rad <= 1 - lambda_rho1):
-            #    rho0[i][j][k] = rho0[i][j][k]
-            # elif((rad >= 1 - lambda_rho1 and rad <= 1 + lambda_rho1)):
-            #    rho0[i][j][k] = (rho0[i][j][k] + rho_min)/2 + (rho0[i][j][k] - rho_min)/2*np.sin((1-rad) * np.pi/(2*lambda_rho1))
-            # else:
-            #    rho0[i][j][k] = rho_min
 
 lnrho['g'] = np.log(rho0['g'])
 T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
@@ -315,7 +311,7 @@ try:
             Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, max log rho = {:.2g}, min log rho = {:.2g}, max rho = {;.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.max('log density'), flow.min('log density'), flow.max('density'), flow.min('density'),flow.min('temp'),flow.min('Al_v'))
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, Max Ma = {:.1g}, max log rho = {:.2g}, min log rho = {:.2g}, max rho = {:.2g}, min rho = {:.2g}, min T = {:.2g}, min Al_v = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'),Re_m_avg, flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.max('log density'), flow.min('log density'), flow.max('density'), flow.min('density'),flow.min('temp'),flow.min('Al_v'))
             logger.info(logger_string)
 
             if not np.isfinite(Re_k_avg):
