@@ -40,7 +40,6 @@ from dedalus.extras import flow_tools
 
 
 from D3_LBVP_SSX import spheromak_pair, zero_modes
-
 import logging
 logger = logging.getLogger(__name__)
 
@@ -63,7 +62,7 @@ length = 10
 #mesh = [16,8]
 mesh = [2,2]
 #mesh = None
-data_dir = "scratchGoalParams" #change each time or overwrite
+data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.01
 # try both of these 0.1 see what happens
@@ -201,8 +200,8 @@ v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 r = np.sqrt(x**2+y**2)
 
 #Changed from disk density distribution to a donut distribution
-zdist = (np.tanh(2 (z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
-rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10 (r - 9/10)))*(1 - rho_min)/2 + rho_min
+zdist = (np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
+rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10*(r - 9/10)))*(1 - rho_min)/2 + rho_min
 rho0['g'] = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
 
 # zdist = -np.tanh(2*z-3)*(1-rho_min)/2 -np.tanh(2*(10-z)-3)*(1-rho_min)/2 + 1 #not in ax+b form
