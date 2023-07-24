@@ -34,11 +34,11 @@ Dedalus 3 edits made by Alex Skeldon. Direct all queries to askeldo1@swarthmore.
 
 import numpy as np
 import os
-import sys
 import dedalus.public as d3
 from dedalus.extras import flow_tools
 
 
+from scipy.special import j0, j1, jn_zeros
 from D3_LBVP_SSX import spheromak_pair, zero_modes
 import logging
 logger = logging.getLogger(__name__)
@@ -111,7 +111,7 @@ B = d3.curl(A)
 # eta = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))
 
 # CFL substitutions
-Va = B/np.sqrt(rho)
+Va = B/np.sqrt(rho) # mu_0 = 1 in our sim
 Cs = np.sqrt(gamma*T)
 Cs_vec = Cs*ex + Cs*ey + Cs *ez
 
@@ -167,9 +167,62 @@ delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope 
 
 # Spheromak initial condition
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
-for i in range(3):
-   A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
+
+#In-line vector potential
+handedness = 1
+j1_zero1 = jn_zeros(1,1)[0]
+kr = j1_zero1/R
+kz = np.pi/L
+b0 = 1
+lam = np.sqrt(kr**2 + kz**2)
+
+theta = np.arctan2(y,x)
+r = np.sqrt(x**2+y**2)
+
+Ar = -b0*kz*j1(kr*r)*np.cos(kz*z)/lam
+At = handedness*b0*j1(kr*r)*np.sin(kz*z)
+Az = b0*j0(kr*r)*np.cos(kz*z)/lam
+
+#now we need to rotate it and add a copy
+# since we have angular symmetry, we just need to translate 10 units
+# and reverse the z component (i.e. negative sign)
+Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(z+10))/lam
+At2 = handedness*b0*j1(kr*r)*np.sin(kz*(z+10))
+Az2 = - b0*j0(kr*r)*np.cos(kz*(z+10))/lam
+
+#We need to localize these fields so they go to 0 in 1 < z < 10 and r > 1
+#use similar tanh's to initialized density
+
+A['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta))
+A['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta))
+A['g'][2] = (Az+Az2)
+
+# #aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
+# for i in range(3):
+#     A['g'][i] = A['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
+
+
+#First full-time run took a while to move towards each other, might want to increase max_vel, or modify the tanh distribution
+max_vel = 0.1
+v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
+# v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # original steeper transition
+
+#Changed from disk density distribution to a donut distribution
+zdist = (-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
+rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10*(r - 9/10)))*(1 - rho_min)/2 + rho_min
+rho0['g'] = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
+
+# zdist = -np.tanh(2*z-3)*(1-rho_min)/2 -np.tanh(2*(10-z)-3)*(1-rho_min)/2 + 1 #not in ax+b form
+# rdist = np.tanh(40*r+40)*(zdist-rho_min)/2 + np.tanh(40*(1-r))*(zdist-rho_min)/2 + rho_min old tanh disk distribution
+# rdist = (np.tanh(40*(r-1.7)+40)*(1-rho_min)/2+np.tanh(40*(1-r))*(1-rho_min)/2 + rho_min)
+
+# rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transition, adopted above
+# rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper z transition
+
+
+lnrho['g'] = np.log(rho0['g'])
+T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
+##eta['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0))*(1 - np.exp((-v0_ch)/(3*rho0*np.sqrt(gamma*T['g']))))
 
 # Frame for meta params in D3 with RealFourier
 # Apparently the parity can force zero values at boundaries, as makeshift approach to BCs.
@@ -191,30 +244,6 @@ for i in range(3):
 # T['c'][1::2,1::2,1::2] = 0
 # lnrho['c'][1::2,1::2,1::2] = 0
 # phi['c'][0::2,0::2,0::2] = 0
-
-#First full-time run took a while to move towards each other, might want to increase max_vel, or modify the tanh distribution
-max_vel = 0.1
-v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
-# v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # original steeper transition
-
-r = np.sqrt(x**2+y**2)
-
-#Changed from disk density distribution to a donut distribution
-zdist = (np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
-rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10*(r - 9/10)))*(1 - rho_min)/2 + rho_min
-rho0['g'] = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
-
-# zdist = -np.tanh(2*z-3)*(1-rho_min)/2 -np.tanh(2*(10-z)-3)*(1-rho_min)/2 + 1 #not in ax+b form
-# rdist = np.tanh(40*r+40)*(zdist-rho_min)/2 + np.tanh(40*(1-r))*(zdist-rho_min)/2 + rho_min old tanh disk distribution
-# rdist = (np.tanh(40*(r-1.7)+40)*(1-rho_min)/2+np.tanh(40*(1-r))*(1-rho_min)/2 + rho_min)
-
-# rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transition, adopted above
-# rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper z transition
-
-
-lnrho['g'] = np.log(rho0['g'])
-T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
-##eta['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0))*(1 - np.exp((-v0_ch)/(3*rho0*np.sqrt(gamma*T['g']))))
 
 # analysis output
 wall_dt_checkpoints = 2
@@ -248,10 +277,11 @@ field_writes.add_task(np.exp(lnrho), name = 'rho')
 field_writes.add_task(T)
 # field_writes.add_task(eta)
 
-# Helicity
-helicity_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=20, sim_dt = output_cadence, mode=fh_mode)
-helicity_writes.add_task(d3.integ(A@B), name="total_helicity")
-helicity_writes.add_task(A@B, name="helicity_at_pos")
+# Scalars
+scalar_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=20, sim_dt = output_cadence, mode=fh_mode)
+scalar_writes.add_task(d3.integ(A@B), name="total_helicity")
+scalar_writes.add_task(A@B, name="helicity_at_pos")
+scalar_writes.add_task(B@B, name ='total_energy')
 
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
