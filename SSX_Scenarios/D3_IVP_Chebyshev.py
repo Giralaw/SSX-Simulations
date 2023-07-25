@@ -6,7 +6,9 @@ Major simplifications fall in two categories
 
 Geometry
 --------
-We consider a square duct using parity bases (sin/cos) in all directions. (RealFourier in D3)
+We consider a square duct using real fourier bases in the x and y dimensions, and
+chebyshev in z.
+NOTE: BCs have not yet been implemented. This script is not currently usable.
 
 Equations
 ---------

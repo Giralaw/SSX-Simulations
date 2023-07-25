@@ -201,7 +201,7 @@ A['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * ((-np.tanh(2 *(z
 A['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) * (-np.tanh(5*(r - 1))/2 + 0.5)
 A['g'][2] = (Az+Az2) * ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) * (-np.tanh(5*(r - 1))/2 + 0.5)
 
-# #aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
+#aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
 for i in range(3):
     A['g'][i] = A['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
 
