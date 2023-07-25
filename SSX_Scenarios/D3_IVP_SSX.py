@@ -52,6 +52,7 @@ nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 6
 #nx,ny,nz = 128,128,640
 r = 1
 length = 10
+dealias = 3/2
 
 # for 3D runs, you can divide the work up over two dimensions (x and y).
 # The product of the two elements of mesh *must* equal the number
@@ -64,7 +65,7 @@ mesh = [2,2]
 #mesh = None
 data_dir = "scratch" #change each time or overwrite
 
-kappa = 0.01
+kappa = 0.1
 # try both of these 0.1 see what happens
 mu = 0.005 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
 eta = 0.01 # Determines Re_m ; 0.001 -> Re_m = 1000; using smaller Rm of 100 for now since 1000 is a bit high.
@@ -86,9 +87,9 @@ nu = mu/rhoInit
 coords = d3.CartesianCoordinates('x', 'y','z')
 dist = d3.Distributor(coords, dtype=np.float64, mesh = mesh)
 
-xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r))
-ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r))
-zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length))
+xbasis = d3.RealFourier(coords['x'], size=nx, bounds=(-r, r), dealias = dealias)
+ybasis = d3.RealFourier(coords['y'], size=ny, bounds=(-r, r), dealias = dealias)
+zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length), dealias = dealias)
 
 # Fields
 t = dist.Field(name='t')
@@ -186,20 +187,23 @@ Az = b0*j0(kr*r)*np.cos(kz*z)/lam
 #now we need to rotate it and add a copy
 # since we have angular symmetry, we just need to translate 10 units
 # and reverse the z component (i.e. negative sign)
-Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(z+10))/lam
-At2 = handedness*b0*j1(kr*r)*np.sin(kz*(z+10))
-Az2 = - b0*j0(kr*r)*np.cos(kz*(z+10))/lam
+Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(z-10))/lam
+At2 = handedness*b0*j1(kr*r)*np.sin(kz*(z-10))
+Az2 = - b0*j0(kr*r)*np.cos(kz*(z-10))/lam
 
 #We need to localize these fields so they go to 0 in 1 < z < 10 and r > 1
 #use similar tanh's to initialized density
+#zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1)
+#rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
+# Well, this is certainly...more stable than it was. Still went negative within 60 iterations.
 
-A['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta))
-A['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta))
-A['g'][2] = (Az+Az2)
+A['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) * (-np.tanh(5*(r - 1))/2 + 0.5)
+A['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) * (-np.tanh(5*(r - 1))/2 + 0.5)
+A['g'][2] = (Az+Az2) * ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) * (-np.tanh(5*(r - 1))/2 + 0.5)
 
 # #aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
-# for i in range(3):
-#     A['g'][i] = A['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
+for i in range(3):
+    A['g'][i] = A['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
 
 
 #First full-time run took a while to move towards each other, might want to increase max_vel, or modify the tanh distribution
@@ -277,11 +281,11 @@ field_writes.add_task(np.exp(lnrho), name = 'rho')
 field_writes.add_task(T)
 # field_writes.add_task(eta)
 
-# Scalars
-scalar_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'helicity'), max_writes=20, sim_dt = output_cadence, mode=fh_mode)
-scalar_writes.add_task(d3.integ(A@B), name="total_helicity")
-scalar_writes.add_task(A@B, name="helicity_at_pos")
-scalar_writes.add_task(B@B, name ='total_energy')
+timeseries = solver.evaluator.add_file_handler(os.path.join(data_dir,'timeseries'), max_writes=20, sim_dt = output_cadence, mode=fh_mode)
+timeseries.add_task(d3.integ(A@B), name="total_helicity")
+timeseries.add_task(A@B, name="helicity_at_pos")
+timeseries.add_task(0.5*d3.integ(v@v),name='Ekin')
+timeseries.add_task(0.5*d3.integ(B@B),name='Emag')
 
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
@@ -310,7 +314,7 @@ good_solution = True
 # Main loop
 try:
     logger.info('Starting loop')
-    while solver.proceed:
+    while solver.proceed and good_solution:
         dt = CFL.compute_timestep()
         solver.step(dt)
 
