@@ -156,6 +156,7 @@ solver.stop_iteration = np.inf
 x,y,z = dist.local_grids(xbasis,ybasis,zbasis)
 #rho0 = np.zeros_like(lnrho['g'])
 rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
+aa = dist.VectorField(coords, name='aa', bases=(xbasis, ybasis, zbasis))
 rho0['g'] = np.zeros_like(lnrho['g'])
 
 # Initial condition parameters
@@ -184,26 +185,31 @@ Ar = -b0*kz*j1(kr*r)*np.cos(kz*z)/lam
 At = handedness*b0*j1(kr*r)*np.sin(kz*z)
 Az = b0*j0(kr*r)*np.cos(kz*z)/lam
 
-#now we need to rotate it and add a copy
+#now we need to add a rotated and translated copy
 # since we have angular symmetry, we just need to translate 10 units
 # and reverse the z component (i.e. negative sign)
-Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(z-10))/lam
-At2 = handedness*b0*j1(kr*r)*np.sin(kz*(z-10))
-Az2 = - b0*j0(kr*r)*np.cos(kz*(z-10))/lam
+Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(-(z-10)))/lam
+At2 = handedness*b0*j1(kr*r)*np.sin(kz*(-(z-10)))
+Az2 = - b0*j0(kr*r)*np.cos(kz*(-(z-10)))/lam
 
 #We need to localize these fields so they go to 0 in 1 < z < 10 and r > 1
 #use similar tanh's to initialized density
-#zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1)
-#rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
+# zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1)
+rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
 # Well, this is certainly...more stable than it was. Still went negative within 60 iterations.
 
-A['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) * (-np.tanh(5*(r - 1))/2 + 0.5)
-A['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) * (-np.tanh(5*(r - 1))/2 + 0.5)
-A['g'][2] = (Az+Az2) * ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) * (-np.tanh(5*(r - 1))/2 + 0.5)
+#Here's a z-distribution that goes to zero at z = 10 and z = 0, could be useful for vector potential drop-off
+# (want a constant value or close to it at both sides of the boundary)
+# 3 and 7 can be adjusted to 2 and 8 for narrower, but less plateau dists in high VP areas
+zVecDist2 = (-np.tanh(4*(z - 3)) + np.tanh(4*(z - 1)) - np.tanh(-4*(z - 7)) + np.tanh(-4*(z - 9)))/2
+
+aa['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * zVecDist2 * rVecDist
+aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
+aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
 
 #aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
 for i in range(3):
-    A['g'][i] = A['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
+    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
 
 
 #First full-time run took a while to move towards each other, might want to increase max_vel, or modify the tanh distribution
@@ -211,7 +217,10 @@ max_vel = 0.1
 v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 # v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # original steeper transition
 
+
 #Changed from disk density distribution to a donut distribution
+#I'm not sure why Slava's HiFi simulation only had a z-dependent distribution for density
+#(which would produce disks instead of donuts since he had cylindrical geometry)
 zdist = (-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
 rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10*(r - 9/10)))*(1 - rho_min)/2 + rho_min
 rho0['g'] = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
@@ -237,17 +246,17 @@ T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
 # zero_modes(lnrho,0,scalar=True)
 # zero_modes(phi,1,scalar=True)
 
-# A['c'][0,1::2,0::2,0::2] = 0
-# A['c'][1,0::2,1::2,0::2] = 0
-# A['c'][2,0::2,0::2,1::2] = 0
+A['c'][0,1::2,0::2,0::2] = 0
+A['c'][1,0::2,1::2,0::2] = 0
+A['c'][2,0::2,0::2,1::2] = 0
 
-# v['c'][0,0::2,1::2,1::2] = 0
-# v['c'][1,1::2,0::2,1::2] = 0
-# v['c'][2,1::2,1::2,0::2] = 0
+v['c'][0,0::2,1::2,1::2] = 0
+v['c'][1,1::2,0::2,1::2] = 0
+v['c'][2,1::2,1::2,0::2] = 0
 
-# T['c'][1::2,1::2,1::2] = 0
-# lnrho['c'][1::2,1::2,1::2] = 0
-# phi['c'][0::2,0::2,0::2] = 0
+T['c'][1::2,1::2,1::2] = 0
+lnrho['c'][1::2,1::2,1::2] = 0
+phi['c'][0::2,0::2,0::2] = 0
 
 # analysis output
 wall_dt_checkpoints = 2
@@ -325,17 +334,17 @@ try:
         # zero_modes(lnrho,0,scalar=True)
         # zero_modes(phi,1,scalar=True)
 
-        # A['c'][0,1::2,0::2,0::2] = 0
-        # A['c'][1,0::2,1::2,0::2] = 0
-        # A['c'][2,0::2,0::2,1::2] = 0
+        A['c'][0,1::2,0::2,0::2] = 0
+        A['c'][1,0::2,1::2,0::2] = 0
+        A['c'][2,0::2,0::2,1::2] = 0
 
-        # v['c'][0,0::2,1::2,1::2] = 0
-        # v['c'][1,1::2,0::2,1::2] = 0
-        # v['c'][2,1::2,1::2,0::2] = 0
+        v['c'][0,0::2,1::2,1::2] = 0
+        v['c'][1,1::2,0::2,1::2] = 0
+        v['c'][2,1::2,1::2,0::2] = 0
 
-        # T['c'][1::2,1::2,1::2] = 0
-        # lnrho['c'][1::2,1::2,1::2] = 0
-        # phi['c'][0::2,0::2,0::2] = 0
+        T['c'][1::2,1::2,1::2] = 0
+        lnrho['c'][1::2,1::2,1::2] = 0
+        phi['c'][0::2,0::2,0::2] = 0
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)

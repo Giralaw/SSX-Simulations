@@ -9,6 +9,8 @@ import matplotlib.pyplot as plt
 # - when looking for older versions, check both current name and that name.
 
 # Dedalus 3 edits made by Alex Skeldon.
+# I don't like how the shape functions interact with the LBVP; it seems convoluted. I'm going to rewrite the
+# initial J in-line with tanh's replacing the piecewise sinusoids
 ###########################################################################################
 """
     This scripts contains the two initializations of the spheromaks.
@@ -19,6 +21,7 @@ import matplotlib.pyplot as plt
 
 #Shape function
 def getS1(r, z, L, R, zCenter):
+    # Shape function for spheromak at z = 0
     #############################################################################################
     """
         This is a script for the shape function described in equation (9) of the above reference.
@@ -92,6 +95,7 @@ def plot_2d(x, y, z, i):
     plt.close()
 
 def getS(r, z, L, R, zCenter):
+    # Shape function for the second spheromak at z = 10
     lamJ = .1*L
     S = np.zeros((r*z).shape)
 
@@ -159,44 +163,60 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # B0 should always be 1, but we are leaving it as a parameter for safe keeping.
     """
 
-    # data_dir = "scratch_init"
-
     j1_zero1 = jn_zeros(1,1)[0]
     kr = j1_zero1/R
     kz = np.pi/L
-
-    #Force-free configuration: curl(B) = J = lam*B
     lam = np.sqrt(kr**2 + kz**2)
     J0 = B0 # This should be 1.
 
-
     # if not a problem variable, is it correct to express our (fixed) J as a vectorfield like normal?
     J = dist.VectorField(coords, name='J', bases=(xbasis, ybasis, zbasis))
-    xx, yy, zz = dist.local_grids(xbasis, ybasis, zbasis)
+    x, y, z = dist.local_grids(xbasis, ybasis, zbasis)
 
     # Setting cylindrical coordinates
-    r = np.sqrt((xx - center[0])**2 + (yy - center[1])**2)
-    theta = np.arctan2(yy,xx)
-    z = zz - center[2]
-    z1 = zz - 10
+    r = np.sqrt(x**2 + y**2)
+    theta = np.arctan2(y,x)
 
+    # commenting out shape function approach; doing it in-line instead
     # Creating the two shape functions
-    S = getS(r, z, L, R, center[2])
-    S1 = getS1(r,z1, L, R, 10)
+    #z = zz - center[2]
+    #z1 = zz - 10
+    # S = getS(r, z, L, R, center[2])
+    # S1 = getS1(r,z1, L, R, 10)
 
     """ Current density; cylindrical components Eq. (9) """
     # Note they are sums of two separate shape functions. S and S1.
     # S - centered at 0
     # S1 - centered at 10 (The other end of the domain)
-    J_r = S*lam*(-np.pi*j1(kr*r)*np.cos(z*kz)) + S1*lam*(np.pi*j1(kr*r)*np.cos((-z1)*kz))
-    J_t = S*lam*(lam*j1(kr*r)*np.sin(z*kz)) - S1*lam*(-lam*j1(kr*r)*np.sin((-z1)*kz))
+
+    # 1 for co-helicity, -1 for counter-helicity?
+    # handedness = 1
+
+    Sr = 0.5*np.tanh(20*(0.8-r))+0.5
+    Sz1 = (np.tanh(20*(z-0.2))+np.tanh(20*(0.9-z)))/2
+    Sz2 = (np.tanh(20*((10-z)-0.2))+np.tanh(20*(0.9-(10-z))))/2
+
+    J_r1 = Sr*Sz1*lam*(-np.pi*j1(kr*r)*np.cos(kz*z))
+    J_t1 = Sr*Sz1*lam*(lam*j1(kr*r)*np.sin(kz*z))
+    J_z1 = Sr*Sz1*lam*(kr*j0(kr*r)*np.sin(kz*z))
+
+    J_r2 = Sr*Sz2*lam*(-np.pi*j1(kr*r)*np.cos(kz*(10-z)))
+    J_t2 = -Sr*Sz2*lam*(lam*j1(kr*r)*np.sin(kz*(10-z)))
+    J_z2 = -Sr*Sz2*lam*(kr*j0(kr*r)*np.sin(kz*(10-z)))
+
+    J_r = J_r1+J_r2
+    J_t = J_t1+J_t2
+    J_z = J_z1+J_z2
+    # I don't see why there is no negative on the first S1 expression.
+    #J_r = S*lam*(-np.pi*j1(kr*r)*np.cos(z*kz)) + S1*lam*(np.pi*j1(kr*r)*np.cos((-(z-10))*kz))
+    #J_t = S*lam*(lam*j1(kr*r)*np.sin(z*kz)) - S1*lam*(-lam*j1(kr*r)*np.sin((-(z-10))*kz))
 
     """ Initializing the J fields for the dedalus problem. """
     # J0 is set to B0, which should be 1.
     
     J['g'][0] = J0*(J_r*np.cos(theta) - J_t*np.sin(theta))
     J['g'][1] = J0*(J_r*np.sin(theta) + J_t*np.cos(theta))
-    J['g'][2] = J0*S*lam*(kr*j0(kr*r)*np.sin(z*kz)) + J0*S1*lam*(kr*j0(kr*r)*np.sin((-z1)*kz))
+    J['g'][2] = J0*J_z
 
 
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
@@ -257,4 +277,4 @@ def zero_modes(initfield, par, scalar=False):
     return initfield
 
 # There used to be an incomplete "spheromak" function here. Refer back to the stored D2
-# Version at some point and see what the point of that func was/if it's still relevant.
+# Version if you ever need it.
