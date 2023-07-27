@@ -44,20 +44,7 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     r = np.sqrt(x**2 + y**2)
     theta = np.arctan2(y,x)
 
-    # commenting out shape function approach; doing it in-line instead
-    # Creating the two shape functions
-    #z = zz - center[2]
-    #z1 = zz - 10
-    # S = getS(r, z, L, R, center[2])
-    # S1 = getS1(r,z1, L, R, 10)
-
-    """ Current density; cylindrical components Eq. (9) """
-    # Note they are sums of two separate shape functions. S and S1.
-    # S - centered at 0
-    # S1 - centered at 10 (The other end of the domain)
-
-    # 1 for co-helicity, -1 for counter-helicity?
-    # handedness = 1
+    # removed shape function calling approach; doing it in-line instead
 
     Sr = 0.5*np.tanh(20*(0.8-r))+0.5
     Sz1 = (np.tanh(20*(z-0.2))+np.tanh(20*(0.9-z)))/2
@@ -67,6 +54,8 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     J_t1 = Sr*Sz1*lam*(lam*j1(kr*r)*np.sin(kz*z))
     J_z1 = Sr*Sz1*lam*(kr*j0(kr*r)*np.sin(kz*z))
 
+    #For our second spheromak's current densities, we rotate the original and translate to z=10
+    #So z-dependence becomes (10-z), and the theta and z components have negatives.
     J_r2 = Sr*Sz2*lam*(-np.pi*j1(kr*r)*np.cos(kz*(10-z)))
     J_t2 = -Sr*Sz2*lam*(lam*j1(kr*r)*np.sin(kz*(10-z)))
     J_z2 = -Sr*Sz2*lam*(kr*j0(kr*r)*np.sin(kz*(10-z)))
@@ -78,10 +67,10 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     """ Initializing the J fields for the dedalus problem. """
     # J0 is set to B0, which should be 1.
     
+    #Convert to Cartesian coordinates
     J['g'][0] = J0*(J_r*np.cos(theta) - J_t*np.sin(theta))
     J['g'][1] = J0*(J_r*np.sin(theta) + J_t*np.cos(theta))
     J['g'][2] = J0*J_z
-
 
     A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
 
@@ -101,9 +90,6 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # phi field not necessary if integ(A) is correct gauge
     # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis))
     tau_phi = dist.VectorField(coords, name='tau_phi')
-    # B = d3.curl(A).evaluate()
-
-    #h5py documentation - write B field into it
 
     problem = d3.LBVP([A, tau_phi],namespace=locals())
 
@@ -116,13 +102,9 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # problem.add_equation("div(A) = 0") # haven't been able to implement coulomb gauge instead of integ gauge here yet.
     # Need to figure out why it isn't working, since it doesn't seem that integ(A) is an equivalent gauge.
 
-
     #Building the solver """
     solver = problem.build_solver()
     solver.solve()
-
-    #analysis
-    # Not sure how to add analysis tasks for a non-IVP. Just want to be able to see B field itself.
     
     return A
 
