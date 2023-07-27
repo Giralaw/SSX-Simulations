@@ -47,7 +47,8 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+nx,ny,nz = 16,16,80
+# nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
 #nx,ny,nz = 64,64,320
 #nx,ny,nz = 128,128,640
 rad = 1
@@ -62,8 +63,8 @@ dealias = 1
 #mesh = [32,16]
 # mesh = [16,16]
 #mesh = [16,8]
-mesh = [2,2]
-#mesh = None
+#mesh = [2,2]
+mesh = None
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.1
@@ -130,14 +131,14 @@ lift = lambda A: d3.Lift(A, lift_basis, -1)
 grad_v = d3.grad(v) + ez*lift(tau_v1) # First-order reduction
 grad_A = d3.grad(A) + ez*lift(tau_A1) # First-order reduction
 
-#Problem
+#Problem; 22 vars with 13 tau's (Coulomb, 12 BCs); 22 eqns
 SSX = d3.IVP([v, A, lnrho, T, phi, tau_A, tau_v1, tau_v2, tau_A1, tau_A2], time=t, namespace=locals())
 
 #variable resistivity
 # SSX.add_equation("eta = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))")
 
 # Continuity
-SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
+SSX.add_equation("dt(lnrho) + trace(grad_v) = - v@grad(lnrho)")
 
 # Not really good model but this would be how you'd express incompressibility
 # SSX.add-equation("div(v) + tau_p = 0")
@@ -146,10 +147,10 @@ SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
 SSX.add_equation("dt(v) + grad(T) - nu*lap(v) + lift(tau_v2)= T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
-SSX.add_equation("dt(A) + grad(phi) + eta*j + lift(tau_A2) = cross(v,B)")
+SSX.add_equation("dt(A) + eta*j + grad(phi) + lift(tau_A2) = cross(v,B)")
 
 #gauge constraints
-SSX.add_equation("div(A) + tau_A = 0")
+SSX.add_equation("trace(grad_A) + tau_A = 0")
 SSX.add_equation("integ(phi) = 0")
 
 # Energy
@@ -196,45 +197,45 @@ delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope 
 
 #BEGINNING of In-line vector potential
 # handedness = 1
-# j1_zero1 = jn_zeros(1,1)[0]
-# kr = j1_zero1/R
-# kz = np.pi/L
-# b0 = 1
-# lam = np.sqrt(kr**2 + kz**2)
+j1_zero1 = jn_zeros(1,1)[0]
+kr = j1_zero1/R
+kz = np.pi/L
+b0 = 1
+lam = np.sqrt(kr**2 + kz**2)
 
-# theta = np.arctan2(y,x)
+theta = np.arctan2(y,x)
 r = np.sqrt(x**2+y**2)
 
-# Ar = -b0*kz*j1(kr*r)*np.cos(kz*z)/lam
-# At = handedness*b0*j1(kr*r)*np.sin(kz*z)
-# Az = b0*j0(kr*r)*np.cos(kz*z)/lam
+Ar = -b0*kz*j1(kr*r)*np.cos(kz*z)/lam
+At = b0*j1(kr*r)*np.sin(kz*z)
+Az = b0*j0(kr*r)*np.cos(kz*z)/lam
 
 #now we need to add a rotated and translated copy
 # since we have angular symmetry, we just need to translate 10 units
 # and reverse the z component (i.e. negative sign)
-# Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(-(z-10)))/lam
-# At2 = handedness*b0*j1(kr*r)*np.sin(kz*(-(z-10)))
-# Az2 = - b0*j0(kr*r)*np.cos(kz*(-(z-10)))/lam
+Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(-(z-10)))/lam
+At2 = -b0*j1(kr*r)*np.sin(kz*(-(z-10)))
+Az2 = -b0*j0(kr*r)*np.cos(kz*(-(z-10)))/lam
 
 #We need to localize these fields so they go to 0 in 1 < z < 10 and r > 1
 #use similar tanh's to initialized density
 # zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1)
-# rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
+rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
 # Well, this is certainly...more stable than it was. Still went negative within 60 iterations.
 
 #Here's a z-distribution that goes to zero at z = 10 and z = 0, could be useful for vector potential drop-off
 # (want a constant value or close to it at both sides of the boundary)
 # 3 and 7 can be adjusted to 2 and 8 for narrower, but less plateau dists in high VP areas
-# zVecDist2 = (-np.tanh(4*(z - 3)) + np.tanh(4*(z - 1)) - np.tanh(-4*(z - 7)) + np.tanh(-4*(z - 9)))/2
+zVecDist2 = (-np.tanh(4*(z - 3)) + np.tanh(4*(z - 1)) - np.tanh(-4*(z - 7)) + np.tanh(-4*(z - 9)))/2
 
-# aa['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * zVecDist2 * rVecDist
-# aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
-# aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
+aa['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * zVecDist2 * rVecDist
+aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
+aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
 
 #END of in-line vector potential functions
 
 
-aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
+# aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
 
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
 for i in range(3):

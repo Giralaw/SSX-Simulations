@@ -62,6 +62,7 @@ grad_A = d3.grad(A) + ez*lift(tau_A1) # First-order reduction
 J = -d3.lap(A) # Coulomb Gauge + double curl identity
 B = d3.curl(A) + ez
 
+# 22 vars, 22 eqns; 12 BCs, 14 taus with Coulomb and incomp.
 hartmann = d3.IVP([v, p, tau_p, tau_v1, tau_v2, A, phi, tau_phi, tau_A1, tau_A2], time=t, namespace=locals())
 
 # Pressure gradient ramp in time

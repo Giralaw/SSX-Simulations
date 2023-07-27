@@ -123,7 +123,7 @@ def zero_modes(initfield, par, scalar=False):
 
     return initfield
 
-# Now that our shapes are made smoothly in-line in spheromak_pair, all three of these piecewise-generating functions can be ignored.
+# Now that our shapes are made smoothly in-line in spheromak_pair, the two piecewise-generating functions can be ignored.
 def getS1(r, z, L, R, zCenter):
     # Shape function for spheromak at z = 0
     #############################################################################################
@@ -191,12 +191,6 @@ def getS1(r, z, L, R, zCenter):
     #    plot_2d(x, y, S[:, :, i], i)
     return S
 
-def plot_2d(x, y, z, i):
-    plt.imshow(z, extent=(np.amin(x), np.amax(x), np.amin(y), np.amax(y)), cmap=plt.cm.hot)
-    plt.colorbar()
-    plt.savefig('2dplots/fig_'+str(i)+'.png')
-    plt.close()
-
 def getS(r, z, L, R, zCenter):
     # Shape function for the second spheromak at z = 10
     lamJ = .1*L
@@ -251,3 +245,9 @@ def getS(r, z, L, R, zCenter):
 
     S = r1 * z1
     return S
+
+def plot_2d(x, y, z, i):
+    plt.imshow(z, extent=(np.amin(x), np.amax(x), np.amin(y), np.amax(y)), cmap=plt.cm.hot)
+    plt.colorbar()
+    plt.savefig('2dplots/fig_'+str(i)+'.png')
+    plt.close()
