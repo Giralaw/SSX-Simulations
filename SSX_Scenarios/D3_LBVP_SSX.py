@@ -18,7 +18,7 @@ import matplotlib.pyplot as plt
 ###########################################################################################
 
 # Only function being used in this file at the moment.
-def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R = 1, L = 1):
+def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """
     This function returns the intial 2X-spheromak vector potential components (x, y, z).
     J0 - Current density
@@ -36,6 +36,9 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     kz = np.pi/L
     lam = np.sqrt(kr**2 + kz**2)
     J0 = B0 # This should be 1.
+    #define handedness of Taylor states. Difference between LH and RH should just be sign on the theta component
+    hand1 = 1
+    hand2 = 1
 
     # if not a problem variable, is it correct to express our (fixed) J as a vectorfield like normal?
     J = dist.VectorField(coords, name='J', bases=(xbasis, ybasis, zbasis))
@@ -52,13 +55,13 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     Sz2 = (np.tanh(20*((10-z)-0.2))+np.tanh(20*(0.9-(10-z))))/2
 
     J_r1 = Sr*Sz1*lam*(-np.pi*j1(kr*r)*np.cos(kz*z))
-    J_t1 = Sr*Sz1*lam*(lam*j1(kr*r)*np.sin(kz*z))
+    J_t1 = hand1*Sr*Sz1*lam*(lam*j1(kr*r)*np.sin(kz*z))
     J_z1 = Sr*Sz1*lam*(kr*j0(kr*r)*np.sin(kz*z))
 
     #For our second spheromak's current densities, we rotate the original and translate to z=10
     #So z-dependence becomes (10-z), and the theta and z components have negatives.
     J_r2 = Sr*Sz2*lam*(-np.pi*j1(kr*r)*np.cos(kz*(10-z)))
-    J_t2 = -Sr*Sz2*lam*(lam*j1(kr*r)*np.sin(kz*(10-z)))
+    J_t2 = -hand2*Sr*Sz2*lam*(lam*j1(kr*r)*np.sin(kz*(10-z)))
     J_z2 = -Sr*Sz2*lam*(kr*j0(kr*r)*np.sin(kz*(10-z)))
 
     J_r = J_r1+J_r2
@@ -81,13 +84,14 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # zero_modes(J,0)
 
     # Decomment these six for parity enforcement in triple RealFourier
-    # A['c'][0,1::2,0::2,0::2] = 0
-    # A['c'][1,0::2,1::2,0::2] = 0
-    # A['c'][2,0::2,0::2,1::2] = 0
+    if parity:
+        A['c'][0,1::2,0::2,0::2] = 0
+        A['c'][1,0::2,1::2,0::2] = 0
+        A['c'][2,0::2,0::2,1::2] = 0
 
-    # J['c'][0,1::2,0::2,0::2] = 0
-    # J['c'][1,0::2,1::2,0::2] = 0
-    # J['c'][2,0::2,0::2,1::2] = 0
+        J['c'][0,1::2,0::2,0::2] = 0
+        J['c'][1,0::2,1::2,0::2] = 0
+        J['c'][2,0::2,0::2,1::2] = 0
 
     # phi field not necessary if integ(A) is correct gauge
     # phi = dist.Field(name='phi', bases=(xbasis,ybasis,zbasis))

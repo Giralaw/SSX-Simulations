@@ -44,24 +44,31 @@ import logging
 logger = logging.getLogger(__name__)
 
 
+# Parameters we commonly modify between runs include:
+# resolution, dealias, parity enforcement, source of A, if we perturb A, mesh, data_dir name, mu (Re), and eta (Rm)
+
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
 nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
 #nx,ny,nz = 64,64,320
 #nx,ny,nz = 128,128,640
-rad = 1
-length = 10
-dealias = 1
-#dealias = 3/2
+
+#dealias = 1
+dealias = 3/2
+
+# These control whether to use parity enforcement lines,
+# whether to initialize A from the LBVP or from analytical expression here, and whether to perturb A
+# Recently added these flags to make it easier to turn those on or off rather than (de)commenting
+parity = True
+LBVP_A = True
+A_perturb = True
 
 # for 3D runs, you can divide the work up over two dimensions (x and y).
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
-#mesh = [32,32]
-#mesh = [32,16]
 #mesh = [16,16]
-#mesh = [16,8]
+#mesh = [8,8]
 mesh = [2,2]
 #mesh = None
 data_dir = "scratch" #change each time or overwrite
@@ -83,6 +90,10 @@ nu = mu/rhoInit
 #diffusivities for heat (kappa -> chi), momentum (viscosity) (mu -> nu), current (eta)
 # life time of currents regulated by resistivity
 # linearization time of temperature goes like e^-t/kappa
+
+# SSX dimensions
+rad = 1
+length = 10
 
 #Coords, dist, bases
 coords = d3.CartesianCoordinates('x', 'y','z')
@@ -163,56 +174,53 @@ rho0['g'] = np.zeros_like(lnrho['g'])
 # Initial condition parameters
 R = rad
 L = R
-# lambda_rho1 = 0.1 - not used in current tanh density distribution
 rho_min = 0.011
 T0 = 0.1
 delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope plasma) has delta = 0.1.
+r = np.sqrt(x**2+y**2)
 
 # Spheromak initial condition
 
 #BEGINNING of In-line vector potential
-# handedness = 1
-# j1_zero1 = jn_zeros(1,1)[0]
-# kr = j1_zero1/R
-# kz = np.pi/L
-# b0 = 1
-# lam = np.sqrt(kr**2 + kz**2)
+if not(LBVP_A):
+    handedness = 1
+    j1_zero1 = jn_zeros(1,1)[0]
+    kr = j1_zero1/R
+    kz = np.pi/L
+    b0 = 1
+    lam = np.sqrt(kr**2 + kz**2)
+    theta = np.arctan2(y,x)
 
-# theta = np.arctan2(y,x)
-r = np.sqrt(x**2+y**2)
+    Ar = -b0*kz*j1(kr*r)*np.cos(kz*z)/lam
+    At = handedness*b0*j1(kr*r)*np.sin(kz*z)
+    Az = b0*j0(kr*r)*np.cos(kz*z)/lam
 
-# Ar = -b0*kz*j1(kr*r)*np.cos(kz*z)/lam
-# At = handedness*b0*j1(kr*r)*np.sin(kz*z)
-# Az = b0*j0(kr*r)*np.cos(kz*z)/lam
+    #now we need to add a rotated and translated copy
+    # since we have angular symmetry, we just need to translate 10 units
+    # and reverse the z component (i.e. negative sign)
+    Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(-(z-10)))/lam
+    At2 = handedness*b0*j1(kr*r)*np.sin(kz*(-(z-10)))
+    Az2 = - b0*j0(kr*r)*np.cos(kz*(-(z-10)))/lam
 
-#now we need to add a rotated and translated copy
-# since we have angular symmetry, we just need to translate 10 units
-# and reverse the z component (i.e. negative sign)
-# Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(-(z-10)))/lam
-# At2 = handedness*b0*j1(kr*r)*np.sin(kz*(-(z-10)))
-# Az2 = - b0*j0(kr*r)*np.cos(kz*(-(z-10)))/lam
+    #We need to localize these fields so they go to 0 in 1 < z < 10 and r > 1
+    #use similar tanh's to initialized density
+    # zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) # Keeping here in case I decide to switch back to this expression
 
-#We need to localize these fields so they go to 0 in 1 < z < 10 and r > 1
-#use similar tanh's to initialized density
-# zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1)
-# rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
+    #Here's a z-distribution that goes to zero at z = 10 and z = 0, could be useful for vector potential drop-off
+    # (want a constant value or close to it at both sides of the boundary)
+    zVecDist2 = (-np.tanh(4*(z - 3)) + np.tanh(4*(z - 1)) - np.tanh(-4*(z - 7)) + np.tanh(-4*(z - 9)))/2
+    rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
 
-#Here's a z-distribution that goes to zero at z = 10 and z = 0, could be useful for vector potential drop-off
-# (want a constant value or close to it at both sides of the boundary)
-# zVecDist2 = (-np.tanh(4*(z - 3)) + np.tanh(4*(z - 1)) - np.tanh(-4*(z - 7)) + np.tanh(-4*(z - 9)))/2
-
-# aa['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * zVecDist2 * rVecDist
-# aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
-# aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
-
-#END of in-line vector potential functions
-
-
-aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
+    aa['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * zVecDist2 * rVecDist
+    aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
+    aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
+else:
+    aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity)
 
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-for i in range(3):
-    A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
+if A_perturb:
+    for i in range(3):
+        A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
 
 
 #First full-time run took a while to move towards each other, might want to increase max_vel, or modify the tanh distribution
@@ -227,7 +235,7 @@ v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 
 zdist = (-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
 rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10*(r - 9/10)))*(1 - rho_min)/2 + rho_min
-rho0['g'] = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
+rho0['g'] = rdist*zdist+rho_min + 1 # adding rho_min here to resolve the rho_min product concern with negative density
 
 #Note that in some configs, the minimum density reads as being *lower* than 0.011 unless dealias = 3/2 (rather than 1) is used.
 # This could be an argument for using dealiasing? Both go negative in density anyway, though.
@@ -244,23 +252,25 @@ T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
 # That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
 #ignore zero_modes function calling lines for now since I wrote out the 9 manual ones anyway
 #Just need to decomment the var['c'] lines here, in the timestepping loop, and in the LBVP to turn on parity enforcement
-# zero_modes(A,0)
-# zero_modes(v,1)
-# zero_modes(T,0,scalar=True)
-# zero_modes(lnrho,0,scalar=True)
-# zero_modes(phi,1,scalar=True)
 
-# A['c'][0,1::2,0::2,0::2] = 0
-# A['c'][1,0::2,1::2,0::2] = 0
-# A['c'][2,0::2,0::2,1::2] = 0
+if parity:
+    # zero_modes(A,0)
+    # zero_modes(v,1)
+    # zero_modes(T,0,scalar=True)
+    # zero_modes(lnrho,0,scalar=True)
+    # zero_modes(phi,1,scalar=True)
 
-# v['c'][0,0::2,1::2,1::2] = 0
-# v['c'][1,1::2,0::2,1::2] = 0
-# v['c'][2,1::2,1::2,0::2] = 0
+    A['c'][0,1::2,0::2,0::2] = 0
+    A['c'][1,0::2,1::2,0::2] = 0
+    A['c'][2,0::2,0::2,1::2] = 0
 
-# T['c'][1::2,1::2,1::2] = 0
-# lnrho['c'][1::2,1::2,1::2] = 0
-# phi['c'][0::2,0::2,0::2] = 0
+    v['c'][0,0::2,1::2,1::2] = 0
+    v['c'][1,1::2,0::2,1::2] = 0
+    v['c'][2,1::2,1::2,0::2] = 0
+
+    T['c'][1::2,1::2,1::2] = 0
+    lnrho['c'][1::2,1::2,1::2] = 0
+    phi['c'][0::2,0::2,0::2] = 0
 
 # analysis output
 wall_dt_checkpoints = 2
@@ -332,25 +342,25 @@ try:
         dt = CFL.compute_timestep()
         solver.step(dt)
 
-        # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
-        # zero_modes(A,0)
-        # zero_modes(v,1)
-        # zero_modes(T,0,scalar=True)
-        # zero_modes(lnrho,0,scalar=True)
-        # zero_modes(phi,1,scalar=True)
+        if parity:
+            # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
+            # zero_modes(A,0)
+            # zero_modes(v,1)
+            # zero_modes(T,0,scalar=True)
+            # zero_modes(lnrho,0,scalar=True)
+            # zero_modes(phi,1,scalar=True)
 
-        # Decomment these nine for parity enforcement in triple RealFourier
-        # A['c'][0,1::2,0::2,0::2] = 0
-        # A['c'][1,0::2,1::2,0::2] = 0
-        # A['c'][2,0::2,0::2,1::2] = 0
+            A['c'][0,1::2,0::2,0::2] = 0
+            A['c'][1,0::2,1::2,0::2] = 0
+            A['c'][2,0::2,0::2,1::2] = 0
 
-        # v['c'][0,0::2,1::2,1::2] = 0
-        # v['c'][1,1::2,0::2,1::2] = 0
-        # v['c'][2,1::2,1::2,0::2] = 0
+            v['c'][0,0::2,1::2,1::2] = 0
+            v['c'][1,1::2,0::2,1::2] = 0
+            v['c'][2,1::2,1::2,0::2] = 0
 
-        # T['c'][1::2,1::2,1::2] = 0
-        # lnrho['c'][1::2,1::2,1::2] = 0
-        # phi['c'][0::2,0::2,0::2] = 0
+            T['c'][1::2,1::2,1::2] = 0
+            lnrho['c'][1::2,1::2,1::2] = 0
+            phi['c'][0::2,0::2,0::2] = 0
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
