@@ -137,6 +137,8 @@ SSX = d3.IVP([v, A, lnrho, T, phi, tau_A, tau_v1, tau_v2, tau_A1, tau_A2], time=
 #variable resistivity
 # SSX.add_equation("eta = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))")
 
+# I wasn't sure if div expressions needed to be replaced with trace(grad_v) functions
+
 # Continuity
 SSX.add_equation("dt(lnrho) + trace(grad_v) = - v@grad(lnrho)")
 
@@ -144,7 +146,7 @@ SSX.add_equation("dt(lnrho) + trace(grad_v) = - v@grad(lnrho)")
 # SSX.add-equation("div(v) + tau_p = 0")
 
 # Momentum/Navier-Stokes
-SSX.add_equation("dt(v) + grad(T) - nu*lap(v) + lift(tau_v2)= T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
+SSX.add_equation("dt(v) + grad(T) - nu*lap(v) + lift(tau_v2)= T*grad(lnrho) - v@grad_v + cross(j,B)/rho")
 
 # MHD equations: A
 SSX.add_equation("dt(A) + eta*j + grad(phi) + lift(tau_A2) = cross(v,B)")
@@ -154,7 +156,7 @@ SSX.add_equation("trace(grad_A) + tau_A = 0")
 SSX.add_equation("integ(phi) = 0")
 
 # Energy
-SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta*J2")
+SSX.add_equation("dt(T) - (gamma - 1) * chi*lap(T) = - (gamma - 1) * T * trace(grad_v) - v@grad(T) + (gamma - 1)*eta*J2")
 
 # Boundary Conditions
 SSX.add_equation("v(z='left') = 0") # no-slip

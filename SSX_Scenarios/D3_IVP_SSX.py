@@ -53,14 +53,14 @@ nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 6
 rad = 1
 length = 10
 dealias = 1
-# dealias = 3/2
+#dealias = 3/2
 
 # for 3D runs, you can divide the work up over two dimensions (x and y).
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
 #mesh = [32,32]
 #mesh = [32,16]
-# mesh = [16,16]
+#mesh = [16,16]
 #mesh = [16,8]
 mesh = [2,2]
 #mesh = None
@@ -130,7 +130,7 @@ SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
 # SSX.add-equation("div(v) + tau_p = 0")
 
 # Momentum
-SSX.add_equation("dt(v) + grad(T) - nu*lap(v) + lift(tau_v2)= T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
+SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
 SSX.add_equation("dt(A) + grad(phi) + eta*j = cross(v,B)")
@@ -196,11 +196,9 @@ r = np.sqrt(x**2+y**2)
 #use similar tanh's to initialized density
 # zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1)
 # rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
-# Well, this is certainly...more stable than it was. Still went negative within 60 iterations.
 
 #Here's a z-distribution that goes to zero at z = 10 and z = 0, could be useful for vector potential drop-off
 # (want a constant value or close to it at both sides of the boundary)
-# 3 and 7 can be adjusted to 2 and 8 for narrower, but less plateau dists in high VP areas
 # zVecDist2 = (-np.tanh(4*(z - 3)) + np.tanh(4*(z - 1)) - np.tanh(-4*(z - 7)) + np.tanh(-4*(z - 9)))/2
 
 # aa['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * zVecDist2 * rVecDist
@@ -224,21 +222,17 @@ v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 
 
 #Changed from disk density distribution to a donut distribution
-#I'm not sure why Slava's HiFi simulation only had a z-dependent distribution for density
+#I'm not sure why Slava's HiFi simulation only had a z-dependent distribution for density, and no radial
 #(which would produce disks instead of donuts since he had cylindrical geometry)
+
 zdist = (-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
 rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10*(r - 9/10)))*(1 - rho_min)/2 + rho_min
 rho0['g'] = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
 
-#Note that the minimum density reads as being *lower* than 0.011 unless dealias = 3/2 (rather than 1) is used.
+#Note that in some configs, the minimum density reads as being *lower* than 0.011 unless dealias = 3/2 (rather than 1) is used.
 # This could be an argument for using dealiasing? Both go negative in density anyway, though.
 
-# zdist = -np.tanh(2*z-3)*(1-rho_min)/2 -np.tanh(2*(10-z)-3)*(1-rho_min)/2 + 1 #not in ax+b form
 # rdist = np.tanh(40*r+40)*(zdist-rho_min)/2 + np.tanh(40*(1-r))*(zdist-rho_min)/2 + rho_min old tanh disk distribution
-# rdist = (np.tanh(40*(r-1.7)+40)*(1-rho_min)/2+np.tanh(40*(1-r))*(1-rho_min)/2 + rho_min)
-
-# rho0[i][j][k] = np.tanh(40*r+40)*(rho0[i][j][k]-rho_min)/2 + np.tanh(40*(1-r))*(rho0[i][j][k]-rho_min)/2 + rho_min #tanh transition, adopted above
-# rho0[i][j][k] = -np.tanh(6*zVal-6)*(1-rho_min)/2 -np.tanh(6*(10-zVal)-6)*(1-rho_min)/2 + 1 # original steeper z transition
 
 
 lnrho['g'] = np.log(rho0['g'])
@@ -248,6 +242,8 @@ T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
 # Frame for meta params in D3 with RealFourier
 # Apparently the parity can force zero values at boundaries, as makeshift approach to BCs.
 # That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
+#ignore zero_modes function calling lines for now since I wrote out the 9 manual ones anyway
+#Just need to decomment the var['c'] lines here, in the timestepping loop, and in the LBVP to turn on parity enforcement
 # zero_modes(A,0)
 # zero_modes(v,1)
 # zero_modes(T,0,scalar=True)
@@ -343,6 +339,7 @@ try:
         # zero_modes(lnrho,0,scalar=True)
         # zero_modes(phi,1,scalar=True)
 
+        # Decomment these nine for parity enforcement in triple RealFourier
         # A['c'][0,1::2,0::2,0::2] = 0
         # A['c'][1,0::2,1::2,0::2] = 0
         # A['c'][2,0::2,0::2,1::2] = 0

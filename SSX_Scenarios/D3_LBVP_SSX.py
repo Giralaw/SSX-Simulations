@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 """
 ###########################################################################################
 
+# Only function being used in this file at the moment.
 def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R = 1, L = 1):
     """
     This function returns the intial 2X-spheromak vector potential components (x, y, z).
@@ -79,6 +80,7 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, center=(0,0,0), B0 = 1, R
     # zero_modes(A,0)
     # zero_modes(J,0)
 
+    # Decomment these six for parity enforcement in triple RealFourier
     # A['c'][0,1::2,0::2,0::2] = 0
     # A['c'][1,0::2,1::2,0::2] = 0
     # A['c'][2,0::2,0::2,1::2] = 0
@@ -124,6 +126,7 @@ def zero_modes(initfield, par, scalar=False):
     return initfield
 
 # Now that our shapes are made smoothly in-line in spheromak_pair, the two piecewise-generating functions can be ignored.
+# And I haven't used plot_2d at all yet, either.
 def getS1(r, z, L, R, zCenter):
     # Shape function for spheromak at z = 0
     #############################################################################################
