@@ -40,6 +40,7 @@ from dedalus.extras import flow_tools
 
 from scipy.special import j0, j1, jn_zeros
 from D3_LBVP_SSX import spheromak_pair, zero_modes
+from D3_Rho_NLBVP_SSX import pair_density
 import logging
 logger = logging.getLogger(__name__)
 
@@ -51,8 +52,9 @@ logger = logging.getLogger(__name__)
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
 #nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
-nx,ny,nz = 64,64,320
+#nx,ny,nz = 64,64,320
 #nx,ny,nz = 128,128,640
+nx,ny,nz = 16, 16, 80
 
 dealias = 1
 #dealias = 3/2
@@ -64,14 +66,15 @@ parity = False
 LBVP_A = True
 A_perturb = False
 log_density = True
+NLBVP = True
 
 # for 3D runs, you can divide the work up over two dimensions (x and y).
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
 #mesh = [16,16]
-mesh = [8,8]
+#mesh = [8,8]
 #mesh = [2,2]
-#mesh = None
+mesh = None
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.1
@@ -190,13 +193,12 @@ delta = 0.1 # The strength of the perturbation. Schaffner et al 2014 (flux-rope 
 r = np.sqrt(x**2+y**2)
 
 # Spheromak initial condition
-
+j1_zero1 = jn_zeros(1,1)[0]
+kr = j1_zero1/R
+kz = np.pi/L
 #BEGINNING of In-line vector potential
 if not(LBVP_A):
     handedness = 1
-    j1_zero1 = jn_zeros(1,1)[0]
-    kr = j1_zero1/R
-    kz = np.pi/L
     b0 = 1
     lam = np.sqrt(kr**2 + kz**2)
     theta = np.arctan2(y,x)
@@ -231,6 +233,9 @@ else:
 if A_perturb:
     for i in range(3):
         A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
+else:
+    for i in range(3):
+        A['g'][i] = aa['g'][i]
 
 rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
 rho0['g'] = np.zeros_like(T['g'])
@@ -242,21 +247,41 @@ wavz = 2
 max_vel = 0.1
 #v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 # v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # original steeper transition
-v['g'][2] = -np.sin(wavz*2*np.pi/length)*max_vel
+v['g'][2] = -np.sin(wavz*np.pi*z/length)*max_vel
 
 
 #Changed from disk density distribution to a donut distribution
 #I'm not sure why Slava's HiFi simulation only had a z-dependent distribution for density, and no radial
 #(which would produce disks instead of donuts since he had cylindrical geometry)
 
-zdist = -np.cos(wavz*4*np.pi*z/length)*(1-rho_min)/2 + 1/2
-# rdist = -np.cos(np.pi*r/rad)*(1-rho_min)/2 + 1/2 # main issue with this is cusps at square edges
-rdist = -np.cos(2*np.pi*x/rad)*np.cos(2*np.pi*y/rad)*(1-rho_min)/2 + 1/2
-# kind of a violation, but maybe could add piece-wise to give const density for r > 1?
+# Original cos(r) * cos(z) density distributions
 
+# main issue with this is cusps at square edges/increasing values at the corners
+#consider putting a decaying radial exponential on this to offset larger values at boundaries
+rdist = (-np.cos(np.pi*2*r/rad)*(1-rho_min)/2 + 1/2)*np.exp(-r)
+zdist = -np.cos(wavz*4*np.pi*z/length)*(1-rho_min)/2 + 1/2
+
+# Attempted well-behaving at square boundaries xy distribution
+# rdist = -np.cos(2*np.pi*2*x/rad)*np.cos(2*np.pi*y/rad)*(1-rho_min)/2 + 1/2
+
+# Tanh distribution attempt
+# These are bad - tanh's cause connections where they shouldn't be. Either need more terms so they fall back down at the
+# edges, or need to switch to regular trig funcs
+    
 # zdist = (-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
 # rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10*(r - 9/10)))*(1 - rho_min)/2 + rho_min
-rho0['g'] = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
+
+# let's try the poloidal flux formulation as Doc suggested:
+
+#rdist = r *j1(kr *r)
+#zdist = np.sin(kz*z)
+
+# Solve the NLBVP for initial density to get smooth ICs that agree with magnetics
+if NLBVP:
+    totaldist = pair_density(xbasis,ybasis,zbasis, coords, dist, parity, LBVP_A, A_perturb, log_density)
+else:
+    totaldist = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
+rho0['g'] = totaldist
 
 #Note that in some configs, the minimum density reads as being *lower* than 0.011 unless dealias = 3/2 (rather than 1) is used.
 # Could this be an argument for using dealiasing? Both go negative in density anyway, though.
@@ -312,23 +337,19 @@ if dist.comm.rank == 0:
     if not os.path.exists(data_dir):
         os.mkdir(data_dir)
 
-# Only look at data from checkpoints - 
-checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints2'), max_writes=10, sim_dt = output_cadence, mode = fh_mode) #other things big, this generally small (when not doing every iter) # but iter = 1 is the diagnostic term # sim_dt = 0.5*output_cadence
+#other things big, this generally small (when not doing every iter) # but iter = 1 is the diagnostic term # sim_dt = output_cadence
+checkpoint = solver.evaluator.add_file_handler(os.path.join(data_dir,'checkpoints'), max_writes=10, iter = 10, mode = fh_mode)
 checkpoint.add_tasks(solver.state)
 
 
-field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_two'), max_writes = 20, sim_dt = output_cadence, mode = fh_mode)
+field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_derived'), max_writes = 10, iter = 10, mode = fh_mode)
 # trying to just put j for third one yields issues - because j not variable in problem? # sim_dt = output_cadence
-field_writes.add_task(v)
 field_writes.add_task(B, name = 'B')
 field_writes.add_task(d3.curl(B), name='j')
-
-# These two should be only issues
-field_writes.add_task(np.exp(lnrho), name = 'rho')
 field_writes.add_task(T)
 # field_writes.add_task(eta)
 
-timeseries = solver.evaluator.add_file_handler(os.path.join(data_dir,'timeseries'), max_writes=20, sim_dt = output_cadence, mode=fh_mode)
+timeseries = solver.evaluator.add_file_handler(os.path.join(data_dir,'timeseries'), max_writes=10, sim_dt = output_cadence, mode=fh_mode)
 timeseries.add_task(d3.integ(A@B), name="total_helicity")
 timeseries.add_task(A@B, name="helicity_at_pos")
 timeseries.add_task(0.5*d3.integ(v@v),name='Ekin')
@@ -336,15 +357,18 @@ timeseries.add_task(0.5*d3.integ(B@B),name='Emag')
 
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
-flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
-flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
+# flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
+# flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
 flow.add_property(np.sqrt(v@v), name = 'flow_speed')
 flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
 flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
 # flow.add_property(np.sqrt(B@B / rho), name = 'Al_v') # see if this makes it more positively well-behaved
 flow.add_property(T, name = 'temp')
-flow.add_property(lnrho, name = 'log density')
-flow.add_property(np.exp(lnrho), name = 'density')
+if log_density:
+    flow.add_property(lnrho, name = 'log density')
+    flow.add_property(np.exp(lnrho), name = 'density')
+else:
+    flow.add_property(rho, name = 'density')
 flow.add_property(0.5*d3.integ(B@B),name='E_mag')
 flow.add_property(Cs_vec, name = 'Cs_vector')
 
@@ -390,30 +414,37 @@ try:
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
             ##logger_string += 'min_rho: {:.4e}'.format(lnrho['g'].min())
-            Re_k_avg = flow.grid_average('Re_k')
-            Re_m_avg = flow.grid_average('Re_m')
+            # Re_k_avg = flow.grid_average('Re_k')
+            # Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
 
             #This seems to be how you spill over lines
             #not sure if there's a way to read out E_mag without applying flow methods to it, but it gives a value anyway
-            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, \
-Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, \
+            logger_string += ', Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, \
 Max Ma = {:.1g}, max rho = {:.2g}, min rho = {:.2g}, \
-min T = {:.2g}, min Al_v = {:.2g}, Emag = {:.2g}'.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'), Re_m_avg,\
+min T = {:.2g}, min Al_v = {:.2g}, Emag = {:.2g}, '.format(\
 flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.max('density'), flow.min('density'),\
 flow.min('temp'),flow.min('Al_v'),flow.grid_average('E_mag'))
+            
+            # version with Re_k and Re_m
+#             logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, \
+# Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, \
+# Max Ma = {:.1g}, max rho = {:.2g}, min rho = {:.2g}, \
+# min T = {:.2g}, min Al_v = {:.2g}, Emag = {:.2g}, '.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'), Re_m_avg,\
+# flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.max('density'), flow.min('density'),\
+# flow.min('temp'),flow.min('Al_v'),flow.grid_average('E_mag'))
             if log_density:
                 logger_string += 'max log rho = {:.2g}, min log rho = {:.2g}'.format(flow.max('log density'),
                 flow.min('log density'))
             logger.info(logger_string)
 
-            if not np.isfinite(Re_k_avg):
-                good_solution = False
-                logger.info("Terminating run.  Trapped on Reynolds = {}".format(Re_k_avg))
-            if not np.isfinite(Re_m_avg):
-                good_solution = False
-                logger.info("Terminating run. Trapped on magnetic Reynolds = {}".format(Re_m_avg))
+            # if not np.isfinite(Re_k_avg):
+            #     good_solution = False
+            #     logger.info("Terminating run.  Trapped on Reynolds = {}".format(Re_k_avg))
+            # if not np.isfinite(Re_m_avg):
+            #     good_solution = False
+            #     logger.info("Terminating run. Trapped on magnetic Reynolds = {}".format(Re_m_avg))
 
 except:
     logger.error('Exception raised, triggering end of main loop.')

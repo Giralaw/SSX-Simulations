@@ -50,9 +50,9 @@ def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity, center=(0,0,0), B
 
     # removed shape function calling approach; doing it in-line instead
 
-    Sr = 0.5*np.tanh(20*(0.8-r))+0.5
-    Sz1 = (np.tanh(20*(z-0.2))+np.tanh(20*(0.9-z)))/2
-    Sz2 = (np.tanh(20*((10-z)-0.2))+np.tanh(20*(0.9-(10-z))))/2
+    Sr = 0.5*np.tanh(1*(0.8-r))+0.5 # TODO: Check/plot these, smooth them, lower coeffs
+    Sz1 = (np.tanh(1*(z-1.5))+np.tanh(1*(1.5-z)))/2
+    Sz2 = (np.tanh(1*((10-z)-1.5))+np.tanh(1*(1.5-(10-z))))/2
 
     J_r1 = Sr*Sz1*lam*(-np.pi*j1(kr*r)*np.cos(kz*z))
     J_t1 = hand1*Sr*Sz1*lam*(lam*j1(kr*r)*np.sin(kz*z))
