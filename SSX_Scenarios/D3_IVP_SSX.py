@@ -36,6 +36,7 @@ import numpy as np
 import os
 import dedalus.public as d3
 from dedalus.extras import flow_tools
+from mpi4py import MPI
 
 
 from scipy.special import j0, j1, jn_zeros
@@ -51,10 +52,10 @@ logger = logging.getLogger(__name__)
 # for optimal efficiency: nx should be divisible by mesh[0], ny by mesh[1], and
 # nx should be close to ny. Bridges nodes have 128 cores, so mesh[0]*mesh[1]
 # should be a multiple of 128.
-#nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
+nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 640
 #nx,ny,nz = 64,64,320
 #nx,ny,nz = 128,128,640
-nx,ny,nz = 16, 16, 80
+# nx,ny,nz = 16, 16, 80
 
 dealias = 1
 #dealias = 3/2
@@ -65,7 +66,7 @@ dealias = 1
 parity = False
 LBVP_A = True
 A_perturb = False
-log_density = True
+log_density = False
 NLBVP = True
 
 # for 3D runs, you can divide the work up over two dimensions (x and y).
@@ -134,7 +135,7 @@ B = d3.curl(A)
 # CFL substitutions
 Va = B/np.sqrt(rho) # mu_0 = 1 in our sim
 Cs = np.sqrt(gamma*T)
-Cs_vec = Cs*ex + Cs*ey + Cs *ez
+Cs_vec = Cs*ex + Cs*ey + Cs*ez
 
 #Problem
 if log_density:
@@ -227,7 +228,7 @@ if not(LBVP_A):
     aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
     aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
 else:
-    aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity)
+    aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity, comm=MPI.COMM_SELF)
 
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
 if A_perturb:
@@ -278,10 +279,10 @@ zdist = -np.cos(wavz*4*np.pi*z/length)*(1-rho_min)/2 + 1/2
 
 # Solve the NLBVP for initial density to get smooth ICs that agree with magnetics
 if NLBVP:
-    totaldist = pair_density(xbasis,ybasis,zbasis, coords, dist, parity, LBVP_A, A_perturb, log_density)
+    totaldist = pair_density(xbasis,ybasis,zbasis, coords, parity, dist, LBVP_A, A_perturb, log_density, aa, comm=MPI.COMM_SELF)
 else:
     totaldist = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
-rho0['g'] = totaldist
+rho0['g'] = totaldist['g']
 
 #Note that in some configs, the minimum density reads as being *lower* than 0.011 unless dealias = 3/2 (rather than 1) is used.
 # Could this be an argument for using dealiasing? Both go negative in density anyway, though.

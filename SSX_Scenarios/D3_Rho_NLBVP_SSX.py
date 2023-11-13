@@ -71,13 +71,19 @@ import numpy as np
 import os
 import dedalus.public as d3
 from dedalus.extras import flow_tools
+from mpi4py import MPI
 
 
 from scipy.special import j0, j1, jn_zeros
 from D3_LBVP_SSX import spheromak_pair, zero_modes
 
-def pair_density(xbasis,ybasis,zbasis, coords, dist, parity, LBVP_A, A_perturb, log_density):
+def pair_density(xbasis, ybasis, zbasis, coords, parity, distmain, LBVP_A, A_perturb, log_density, a_imp, comm=None):
+    #Need to pass parallel distribution in for calculating vector potential here
 
+    # NLBVPs cannot be run in parallel due to Newton iterations, so this must use a serial distributor
+    # None causes different issue than comm or mpi.comm_self so that's fun
+    distser = d3.Distributor(coords, dtype=np.float64, mesh=None, comm=None) # Comm? Or mpi.comm_self? Or none?
+    
     kappa = 0.1
     # try both of these 0.1 see what happens
     mu = 0.005 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
@@ -101,17 +107,17 @@ def pair_density(xbasis,ybasis,zbasis, coords, dist, parity, LBVP_A, A_perturb, 
     length = 10
 
     # Fields
-    v = dist.VectorField(coords, name='v', bases=(xbasis, ybasis, zbasis))
-    A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
+    v = distser.VectorField(coords, name='v', bases=(xbasis, ybasis, zbasis))
+    A = distser.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
     if log_density:
-        lnrho = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
+        lnrho = distser.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
     else:
-        rho = dist.Field(name='rho', bases=(xbasis, ybasis, zbasis))
-    T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
-    phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
-    tau_A = dist.Field(name='tau_A')
-    # eta = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
-    ex, ey, ez = coords.unit_vector_fields(dist)
+        rho = distser.Field(name='rho', bases=(xbasis, ybasis, zbasis))
+    T = distser.Field(name='T', bases=(xbasis, ybasis, zbasis))
+    phi = distser.Field(name='phi', bases=(xbasis, ybasis, zbasis))
+    tau_A = distser.Field(name='tau_A')
+    # eta = distser.Field(name='T', bases=(xbasis, ybasis, zbasis))
+    ex, ey, ez = coords.unit_vector_fields(distser)
 
     # Coulomb Gauge implies J = -Laplacian(A)
     j = -d3.lap(A)
@@ -156,8 +162,8 @@ def pair_density(xbasis,ybasis,zbasis, coords, dist, parity, LBVP_A, A_perturb, 
     # Energy
     Rho.add_equation("(gamma - 1) * chi*lap(T) = - (gamma - 1) * T * div(v) - v@grad(T) + (gamma - 1)*eta*J2")
 
-    x,y,z = dist.local_grids(xbasis,ybasis,zbasis)
-    aa = dist.VectorField(coords, name='aa', bases=(xbasis, ybasis, zbasis))
+    x,y,z = distser.local_grids(xbasis,ybasis,zbasis)
+    aa = distser.VectorField(coords, name='aa', bases=(xbasis, ybasis, zbasis))
 
     # Initial condition parameters
     R = rad
@@ -203,14 +209,18 @@ def pair_density(xbasis,ybasis,zbasis, coords, dist, parity, LBVP_A, A_perturb, 
         aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
         aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
     else:
-        aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity)
+        aa = a_imp
 
     # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
-    if A_perturb:
-        for i in range(3): 
-            A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
-
-    rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
+    # if A_perturb:
+    #     for i in range(3): 
+    #         A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
+    # else: 
+    #     for i in range(3): 
+    #         # A['g'][i] = aa['g'][i]
+    #         A['g'][i] = aa['g'][i]
+    
+    rho0 = distser.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
     rho0['g'] = np.zeros_like(T['g'])
 
     
@@ -279,8 +289,10 @@ def pair_density(xbasis,ybasis,zbasis, coords, dist, parity, LBVP_A, A_perturb, 
     while pert_norm > tolerance:
         solver.newton_iteration()
         pert_norm = sum(pert.allreduce_data_norm('c', 2) for pert in solver.perturbations)
-        
+    
     if log_density:
-        return lnrho
+        dens = lnrho
     else:
-        return rho
+        dens = rho
+    return dens
+    # return A, T, dens

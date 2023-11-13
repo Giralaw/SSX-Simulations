@@ -2,6 +2,7 @@ import dedalus.public as d3
 import numpy as np
 from scipy.special import j0, j1, jn_zeros
 import matplotlib.pyplot as plt
+from mpi4py import MPI
 
 #See "Turbulence analysis of an experimental flux-rope plasma", D A Schaffner et al, 2014.
 
@@ -18,7 +19,7 @@ import matplotlib.pyplot as plt
 ###########################################################################################
 
 # Only function being used in this file at the moment.
-def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity, center=(0,0,0), B0 = 1, R = 1, L = 1):
+def spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity, center=(0,0,0), B0 = 1, R = 1, L = 1, comm=None):
     """
     This function returns the intial 2X-spheromak vector potential components (x, y, z).
     J0 - Current density
