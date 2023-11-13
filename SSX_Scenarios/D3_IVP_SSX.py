@@ -58,40 +58,34 @@ nx,ny,nz = 32,32,160 #formerly 32 x 32 x 160? Current plan is 64 x 64 x 320 or 6
 # nx,ny,nz = 16, 16, 80
 
 dealias = 1
-#dealias = 3/2
 
 # These control whether to use parity enforcement lines,
 # whether to initialize A from the LBVP or from analytical expression here, and whether to perturb A
 # Recently added these flags to make it easier to turn those on or off rather than (de)commenting
-parity = False
-LBVP_A = True
 A_perturb = False
-log_density = False
-NLBVP = True
 
 # for 3D runs, you can divide the work up over two dimensions (x and y).
 # The product of the two elements of mesh *must* equal the number
 # of cores used.
 #mesh = [16,16]
 #mesh = [8,8]
-#mesh = [2,2]
-mesh = None
+mesh = [2,2]
+# mesh = None
 data_dir = "scratch" #change each time or overwrite
 
 kappa = 0.1
 # try both of these 0.1 see what happens
-mu = 0.005 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
+mu = 0.05 #Determines Re_k ; 0.05 -> Re_k = 20 (try 0.005?)
 eta = 0.01 # Determines Re_m ; 0.001 -> Re_m = 1000; using smaller Rm of 100 for now since 1000 is a bit high.
 
-rhoInit = 1 #rho0 is redefined later, and generally has a whole mess associated with it
 gamma = 5./3.
 
 # eta_sp = 2.7 * 10**(-4)
 # eta_ch = 4.4 * 10**(-3)
 # v0_ch = 2.9 * 10**(-2)
 
-chi = kappa/rhoInit
-nu = mu/rhoInit
+chi = kappa
+nu = mu
 #diffusivities for heat (kappa -> chi), momentum (viscosity) (mu -> nu), current (eta)
 # life time of currents regulated by resistivity
 # linearization time of temperature goes like e^-t/kappa
@@ -112,10 +106,7 @@ zbasis = d3.RealFourier(coords['z'], size=nz, bounds=(0, length), dealias = deal
 t = dist.Field(name='t')
 v = dist.VectorField(coords, name='v', bases=(xbasis, ybasis, zbasis))
 A = dist.VectorField(coords, name='A', bases=(xbasis, ybasis, zbasis))
-if log_density:
-    lnrho = dist.Field(name='lnrho', bases=(xbasis, ybasis, zbasis))
-else:
-    rho = dist.Field(name='rho', bases=(xbasis, ybasis, zbasis))
+rho = dist.Field(name='rho', bases=(xbasis, ybasis, zbasis))
 T = dist.Field(name='T', bases=(xbasis, ybasis, zbasis))
 phi = dist.Field(name='phi', bases=(xbasis, ybasis, zbasis))
 tau_A = dist.Field(name='tau_A')
@@ -125,8 +116,6 @@ ex, ey, ez = coords.unit_vector_fields(dist)
 # Coulomb Gauge implies J = -Laplacian(A)
 j = -d3.lap(A)
 J2 = j@j
-if log_density:
-    rho = np.exp(lnrho)
 B = d3.curl(A)
 
 #spitzer and chodra resistivity combination
@@ -138,27 +127,19 @@ Cs = np.sqrt(gamma*T)
 Cs_vec = Cs*ex + Cs*ey + Cs*ez
 
 #Problem
-if log_density:
-    SSX = d3.IVP([v, A, lnrho, T, phi, tau_A], time=t, namespace=locals())
-else:
-    SSX = d3.IVP([v, A, rho, T, phi, tau_A], time=t, namespace=locals())
+SSX = d3.IVP([v, A, rho, T, phi, tau_A], time=t, namespace=locals())
 
 #variable resistivity
 # SSX.add_equation("eta = eta_sp/(np.sqrt(T)**3) + (eta_ch/np.sqrt(rho))*(1 - np.exp((-v0_ch*np.sqrt(J2))/(3*rho*np.sqrt(gamma*T))))")
 
-if log_density:
-    # Continuity
-    SSX.add_equation("dt(lnrho) + div(v) = - v@grad(lnrho)")
+# Not really good model but this would be how you'd express incompressibility
+# SSX.add-equation("div(v) + tau_p = 0")
 
-    # Not really good model but this would be how you'd express incompressibility
-    # SSX.add-equation("div(v) + tau_p = 0")
+# Continuity
+SSX.add_equation("dt(rho) = -rho*div(v) -v@grad(rho)")
 
-    # Momentum
-    SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(lnrho) - v@grad(v) + cross(j,B)/rho")
-else:
-    #Non-lnrho formulation equations:
-    SSX.add_equation("dt(rho) = -rho*div(v) -v@grad(rho)")
-    SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(rho)/rho - v@grad(v) + cross(j,B)/rho")
+# Momentum
+SSX.add_equation("dt(v) + grad(T) - nu*lap(v) = T*grad(rho)/rho - v@grad(v) + cross(j,B)/rho")
 
 # MHD equations: A
 SSX.add_equation("dt(A) + grad(phi) + eta*j = cross(v,B)")
@@ -197,38 +178,39 @@ r = np.sqrt(x**2+y**2)
 j1_zero1 = jn_zeros(1,1)[0]
 kr = j1_zero1/R
 kz = np.pi/L
+
 #BEGINNING of In-line vector potential
-if not(LBVP_A):
-    handedness = 1
-    b0 = 1
-    lam = np.sqrt(kr**2 + kz**2)
-    theta = np.arctan2(y,x)
+# if not(LBVP_A):
+#     handedness = 1
+#     b0 = 1
+#     lam = np.sqrt(kr**2 + kz**2)
+#     theta = np.arctan2(y,x)
 
-    Ar = -b0*kz*j1(kr*r)*np.cos(kz*z)/lam
-    At = handedness*b0*j1(kr*r)*np.sin(kz*z)
-    Az = b0*j0(kr*r)*np.cos(kz*z)/lam
+#     Ar = -b0*kz*j1(kr*r)*np.cos(kz*z)/lam
+#     At = handedness*b0*j1(kr*r)*np.sin(kz*z)
+#     Az = b0*j0(kr*r)*np.cos(kz*z)/lam
 
-    #now we need to add a rotated and translated copy
-    # since we have angular symmetry, we just need to translate 10 units
-    # and reverse the z component (i.e. negative sign)
-    Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(-(z-10)))/lam
-    At2 = handedness*b0*j1(kr*r)*np.sin(kz*(-(z-10)))
-    Az2 = - b0*j0(kr*r)*np.cos(kz*(-(z-10)))/lam
+#     #now we need to add a rotated and translated copy
+#     # since we have angular symmetry, we just need to translate 10 units
+#     # and reverse the z component (i.e. negative sign)
+#     Ar2 = -b0*kz*j1(kr*r)*np.cos(kz*(-(z-10)))/lam
+#     At2 = handedness*b0*j1(kr*r)*np.sin(kz*(-(z-10)))
+#     Az2 = - b0*j0(kr*r)*np.cos(kz*(-(z-10)))/lam
 
-    #We need to localize these fields so they go to 0 in 1 < z < 10 and r > 1
-    #use similar tanh's to initialized density
-    # zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) # Keeping here in case I decide to switch back to this expression
+#     #We need to localize these fields so they go to 0 in 1 < z < 10 and r > 1
+#     #use similar tanh's to initialized density
+#     # zVecDist = ((-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))/2 + 1) # Keeping here in case I decide to switch back to this expression
 
-    #Here's a z-distribution that goes to zero at z = 10 and z = 0, could be useful for vector potential drop-off
-    # (want a constant value or close to it at both sides of the boundary)
-    zVecDist2 = (-np.tanh(4*(z - 3)) + np.tanh(4*(z - 1)) - np.tanh(-4*(z - 7)) + np.tanh(-4*(z - 9)))/2
-    rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
+#     #Here's a z-distribution that goes to zero at z = 10 and z = 0, could be useful for vector potential drop-off
+#     # (want a constant value or close to it at both sides of the boundary)
+#     zVecDist2 = (-np.tanh(4*(z - 3)) + np.tanh(4*(z - 1)) - np.tanh(-4*(z - 7)) + np.tanh(-4*(z - 9)))/2
+#     rVecDist = -np.tanh(5*(r - 1))/2 + 0.5
 
-    aa['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * zVecDist2 * rVecDist
-    aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
-    aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
-else:
-    aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist, parity, comm=MPI.COMM_SELF)
+#     aa['g'][0] = ((Ar+Ar2)*np.cos(theta) - (At+At2)*np.sin(theta)) * zVecDist2 * rVecDist
+#     aa['g'][1] = ((Ar+Ar2)*np.sin(theta) + (At+At2)*np.cos(theta)) * zVecDist2 * rVecDist
+#     aa['g'][2] = (Az+Az2) * zVecDist2 * rVecDist
+
+aa = spheromak_pair(xbasis,ybasis,zbasis, coords, dist)
 
 # The vector potential is subject to some perturbation. This distorts all the magnetic field components in the same direction.
 if A_perturb:
@@ -236,7 +218,10 @@ if A_perturb:
         A['g'][i] = aa['g'][i] *(1 + delta*x*np.exp(-z**2) + delta*x*np.exp(-(z-10)**2)) # maybe the exponent here is too steep of an IC?
 else:
     for i in range(3):
-        A['g'][i] = aa['g'][i]
+        # A['g'][i] = aa['g'][i]
+        
+        # zero vec pot. init.
+        A['g'][i] = 0
 
 rho0 = dist.Field(name='rho0', bases=(xbasis, ybasis, zbasis))
 rho0['g'] = np.zeros_like(T['g'])
@@ -245,7 +230,7 @@ rho0['g'] = np.zeros_like(T['g'])
 wavz = 2
 
 #First full-time run took a while to move towards each other, might want to increase max_vel, or modify the tanh distribution
-max_vel = 0.1
+max_vel = 0.2
 #v['g'][2] = -np.tanh(z-2)*max_vel/2 + -np.tanh(z - 8)*max_vel/2
 # v['g'][2] = -np.tanh(6*z - 6)*max_vel/2 + -np.tanh(6*z - 54)*max_vel/2 # original steeper transition
 v['g'][2] = -np.sin(wavz*np.pi*z/length)*max_vel
@@ -259,41 +244,31 @@ v['g'][2] = -np.sin(wavz*np.pi*z/length)*max_vel
 
 # main issue with this is cusps at square edges/increasing values at the corners
 #consider putting a decaying radial exponential on this to offset larger values at boundaries
-rdist = (-np.cos(np.pi*2*r/rad)*(1-rho_min)/2 + 1/2)*np.exp(-r)
+rdist = (-np.cos(np.pi*2*r/rad)*(1-rho_min)/2 + 1/2)*np.exp(-4*r)
 zdist = -np.cos(wavz*4*np.pi*z/length)*(1-rho_min)/2 + 1/2
+
+# other current option is to try the poloidal flux formulation as Doc suggested:
+#rdist = r *j1(kr *r)
+#zdist = np.sin(kz*z)
 
 # Attempted well-behaving at square boundaries xy distribution
 # rdist = -np.cos(2*np.pi*2*x/rad)*np.cos(2*np.pi*y/rad)*(1-rho_min)/2 + 1/2
 
-# Tanh distribution attempt
-# These are bad - tanh's cause connections where they shouldn't be. Either need more terms so they fall back down at the
-# edges, or need to switch to regular trig funcs
-    
-# zdist = (-np.tanh(2 *(z - 1.5)) - np.tanh(-2*(z - 8.5)))*(1 - rho_min)/2 + 1
-# rdist = (np.tanh(10*(r - 3/10)) + np.tanh(-10*(r - 9/10)))*(1 - rho_min)/2 + rho_min
-
-# let's try the poloidal flux formulation as Doc suggested:
-
-#rdist = r *j1(kr *r)
-#zdist = np.sin(kz*z)
-
 # Solve the NLBVP for initial density to get smooth ICs that agree with magnetics
-if NLBVP:
-    totaldist = pair_density(xbasis,ybasis,zbasis, coords, parity, dist, LBVP_A, A_perturb, log_density, aa, comm=MPI.COMM_SELF)
-else:
-    totaldist = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
-rho0['g'] = totaldist['g']
+#totaldist = rdist*zdist+rho_min # adding rho_min here to resolve the rho_min product concern with negative density
+
+# constant density test
+totaldist = 1
+
+rho0['g'] = totaldist
 
 #Note that in some configs, the minimum density reads as being *lower* than 0.011 unless dealias = 3/2 (rather than 1) is used.
 # Could this be an argument for using dealiasing? Both go negative in density anyway, though.
 
 # rdist = np.tanh(40*r+40)*(zdist-rho_min)/2 + np.tanh(40*(1-r))*(zdist-rho_min)/2 + rho_min old tanh disk distribution
 
-if log_density:
-    lnrho['g'] = np.log(rho0['g'])
-else:
-    rho['g'] = rho0['g']
-T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
+rho['g'] = rho0['g']
+T['g'] = T0 * rho0['g']**(gamma - 1)
 ##eta['g'] = eta_sp/(np.sqrt(T['g'])**3 + (eta_ch/np.sqrt(rho0))*(1 - np.exp((-v0_ch)/(3*rho0*np.sqrt(gamma*T['g']))))
 
 # Frame for meta params in D3 with RealFourier
@@ -301,26 +276,6 @@ T['g'] = T0 * rho0['g']**(gamma - 1) # np.exp(lnrho['g'])
 # That's what I gleaned from https://groups.google.com/u/1/g/dedalus-users/c/XwHzS_T3zIE/m/WUQlQVIKAgAJ
 #ignore zero_modes function calling lines for now since I wrote out the 9 manual ones anyway
 #Just need to decomment the var['c'] lines here, in the timestepping loop, and in the LBVP to turn on parity enforcement
-
-if parity:
-    # zero_modes(A,0)
-    # zero_modes(v,1)
-    # zero_modes(T,0,scalar=True)
-    # zero_modes(lnrho,0,scalar=True)
-    # zero_modes(phi,1,scalar=True)
-
-    A['c'][0,1::2,0::2,0::2] = 0
-    A['c'][1,0::2,1::2,0::2] = 0
-    A['c'][2,0::2,0::2,1::2] = 0
-
-    v['c'][0,0::2,1::2,1::2] = 0
-    v['c'][1,1::2,0::2,1::2] = 0
-    v['c'][2,1::2,1::2,0::2] = 0
-
-    T['c'][1::2,1::2,1::2] = 0
-    if log_density:
-        lnrho['c'][1::2,1::2,1::2] = 0
-    phi['c'][0::2,0::2,0::2] = 0
 
 # analysis output
 wall_dt_checkpoints = 2
@@ -348,6 +303,7 @@ field_writes = solver.evaluator.add_file_handler(os.path.join(data_dir,'fields_d
 field_writes.add_task(B, name = 'B')
 field_writes.add_task(d3.curl(B), name='j')
 field_writes.add_task(T)
+field_writes.add_task(d3.cross(j,B), name='f_mag')
 # field_writes.add_task(eta)
 
 timeseries = solver.evaluator.add_file_handler(os.path.join(data_dir,'timeseries'), max_writes=10, sim_dt = output_cadence, mode=fh_mode)
@@ -358,18 +314,14 @@ timeseries.add_task(0.5*d3.integ(B@B),name='Emag')
 
 # Flow properties
 flow = flow_tools.GlobalFlowProperty(solver, cadence = 1)
-# flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
-# flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
+flow.add_property(np.sqrt(v@v) / nu, name = 'Re_k')
+flow.add_property(np.sqrt(v@v) / eta, name = 'Re_m')
 flow.add_property(np.sqrt(v@v), name = 'flow_speed')
 flow.add_property(np.sqrt(v@v) / np.sqrt(T), name = 'Ma') # Mach number; T going negative?
 flow.add_property(np.sqrt(B@B) / np.sqrt(rho), name = 'Al_v')
-# flow.add_property(np.sqrt(B@B / rho), name = 'Al_v') # see if this makes it more positively well-behaved
+flow.add_property(np.sqrt(B@B / rho), name = 'Al_v') # see if this makes it more positively well-behaved
 flow.add_property(T, name = 'temp')
-if log_density:
-    flow.add_property(lnrho, name = 'log density')
-    flow.add_property(np.exp(lnrho), name = 'density')
-else:
-    flow.add_property(rho, name = 'density')
+flow.add_property(rho, name = 'density')
 flow.add_property(0.5*d3.integ(B@B),name='E_mag')
 flow.add_property(Cs_vec, name = 'Cs_vector')
 
@@ -390,54 +342,32 @@ try:
     while solver.proceed and good_solution:
         dt = CFL.compute_timestep()
         solver.step(dt)
-
-        if parity:
-            # enforce parities for appropriate dynamical variables at each timestep to prevent non-zero buildup
-            # zero_modes(A,0)
-            # zero_modes(v,1)
-            # zero_modes(T,0,scalar=True)
-            # zero_modes(lnrho,0,scalar=True)
-            # zero_modes(phi,1,scalar=True)
-
-            A['c'][0,1::2,0::2,0::2] = 0
-            A['c'][1,0::2,1::2,0::2] = 0
-            A['c'][2,0::2,0::2,1::2] = 0
-
-            v['c'][0,0::2,1::2,1::2] = 0
-            v['c'][1,1::2,0::2,1::2] = 0
-            v['c'][2,1::2,1::2,0::2] = 0
-
-            T['c'][1::2,1::2,1::2] = 0
-            if log_density:
-                lnrho['c'][1::2,1::2,1::2] = 0
-            phi['c'][0::2,0::2,0::2] = 0
             
         if (solver.iteration-1) % 1 == 0:
             logger_string = 'iter: {:d}, t/tb: {:.2e}, dt/tb: {:.2e}, sim_time: {:.4e}, dt: {:.2e}'.format(solver.iteration, solver.sim_time/char_time, dt/char_time, solver.sim_time, dt)
-            ##logger_string += 'min_rho: {:.4e}'.format(lnrho['g'].min())
-            # Re_k_avg = flow.grid_average('Re_k')
-            # Re_m_avg = flow.grid_average('Re_m')
+            Re_k_avg = flow.grid_average('Re_k')
+            Re_m_avg = flow.grid_average('Re_m')
             v_avg = flow.grid_average('flow_speed')
             Al_v_avg = flow.grid_average('Al_v')
 
             #This seems to be how you spill over lines
             #not sure if there's a way to read out E_mag without applying flow methods to it, but it gives a value anyway
-            logger_string += ', Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, \
-Max Ma = {:.1g}, max rho = {:.2g}, min rho = {:.2g}, \
-min T = {:.2g}, min Al_v = {:.2g}, Emag = {:.2g}, '.format(\
-flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.max('density'), flow.min('density'),\
-flow.min('temp'),flow.min('Al_v'),flow.grid_average('E_mag'))
-            
-            # version with Re_k and Re_m
-#             logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, \
-# Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, \
+
+            # version without Re_k and Re_m
+#             logger_string += ', Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, \
 # Max Ma = {:.1g}, max rho = {:.2g}, min rho = {:.2g}, \
-# min T = {:.2g}, min Al_v = {:.2g}, Emag = {:.2g}, '.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'), Re_m_avg,\
+# min T = {:.2g}, min Al_v = {:.2g}, Emag = {:.2g}, '.format(\
 # flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.max('density'), flow.min('density'),\
 # flow.min('temp'),flow.min('Al_v'),flow.grid_average('E_mag'))
-            if log_density:
-                logger_string += 'max log rho = {:.2g}, min log rho = {:.2g}'.format(flow.max('log density'),
-                flow.min('log density'))
+            
+            # version with Re_k and Re_m
+            logger_string += ' Max Re_k = {:.2g}, Avg Re_k = {:.2g}, Max Re_m = {:.2g}, \
+Avg Re_m = {:.2g}, Max vel = {:.2g}, Avg vel = {:.2g}, Max alf vel = {:.2g}, Avg alf vel = {:.2g}, \
+Max Ma = {:.1g}, max rho = {:.2g}, min rho = {:.2g}, \
+min T = {:.2g}, min Al_v = {:.2g}, Emag = {:.2g}, '.format(flow.max('Re_k'), Re_k_avg, flow.max('Re_m'), Re_m_avg,\
+flow.max('flow_speed'), v_avg, flow.max('Al_v'), Al_v_avg, flow.max('Ma'), flow.max('density'), flow.min('density'),\
+flow.min('temp'),flow.min('Al_v'),flow.grid_average('E_mag'))
+
             logger.info(logger_string)
 
             # if not np.isfinite(Re_k_avg):
